@@ -66,11 +66,11 @@ def read_downloads(limit: int = 100, offset: int = 0) -> list:
                 except json.JSONDecodeError:
                     pass
 
-    # Return paginated slice (offset from end)
-    total = len(records)
-    start = max(0, total - offset - limit)
-    end = max(0, total - offset)
-    return records[start:end]
+    # Return paginated slice from newest, reversed so newest comes first
+    records_rev = list(reversed(records))
+    start = offset
+    end = offset + limit
+    return records_rev[start:end]
 
 
 def count_downloads() -> int:

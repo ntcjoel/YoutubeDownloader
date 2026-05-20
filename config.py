@@ -126,3 +126,30 @@ def get_cleanup_policy() -> str:
 
 def get_disk_limit_enabled() -> bool:
     return bool(get("disk_limit_enabled", False))
+
+
+def save_config(values: dict) -> None:
+    """
+    Write values dict to config.yaml (partial update).
+    Clears the _CONFIG cache so next load_config() picks up changes.
+    """
+    global _CONFIG
+    path = _get_config_path()
+
+    # Load existing yaml as-is (preserve comments, structure)
+    existing = {}
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            existing = yaml.safe_load(f) or {}
+
+    # Merge new values (only keys user is changing)
+    existing.update(values)
+
+    # Write back atomically
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        yaml.safe_dump(existing, f, default_flow_style=False, allow_unicode=True)
+    os.replace(tmp, path)
+
+    # Invalidate cache so next call reloads
+    _CONFIG = None

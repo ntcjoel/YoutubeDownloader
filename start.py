@@ -169,6 +169,50 @@ def save_metadata():
         return jsonify({"error": "FFmpeg failed to write metadata"}), 500
 
 
+@app.route("/api/config")
+def get_config():
+    """Return current config (all keys)."""
+    return jsonify(cfg)
+
+
+@app.route("/api/config", methods=["POST"])
+def update_config():
+    """
+    Save partial config update to config.yaml.
+    Returns updated config on success.
+    """
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+
+    # Filter to known config keys
+    allowed = {
+        "video_dir", "music_dir", "disk_limit_enabled",
+        "max_video_size_gb", "max_music_size_gb",
+        "cleanup_policy", "default_quality", "default_format",
+        "plex_compatible", "retention_days",
+    }
+    filtered = {k: v for k, v in data.items() if k in allowed}
+    if not filtered:
+        return jsonify({"error": "No valid config keys provided"}), 400
+
+    try:
+        config.save_config(filtered)
+    except Exception as e:
+        log.error("Failed to save config: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+    # Reload config in this process
+    global cfg
+    cfg = config.load_config()
+
+    # Broadcast config change to all connected clients
+    socketio.emit("config_updated", cfg)
+
+    log.info("Config updated: %s", list(filtered.keys()))
+    return jsonify({"ok": True, "config": cfg})
+
+
 def _read_current_metadata(filepath: str) -> dict:
     """Read existing metadata from a media file using ffprobe."""
     import json as _json

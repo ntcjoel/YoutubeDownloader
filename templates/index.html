@@ -580,6 +580,98 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .autofill-note { font-size: 0.72rem; color: var(--text2); margin-bottom: 12px; }
+
+    /* ---- Settings tab ---- */
+    .settings-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .settings-section-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .settings-row:last-child { margin-bottom: 0; }
+    .settings-label {
+      font-size: 0.82rem;
+      color: var(--text);
+      min-width: 140px;
+    }
+    .settings-hint {
+      font-size: 0.72rem;
+      color: var(--text2);
+      width: 100%;
+      margin-top: -6px;
+      margin-bottom: 8px;
+    }
+    input[type="text"].settings-input,
+    input[type="number"].settings-input,
+    select.settings-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-size: 0.85rem;
+      outline: none;
+      min-width: 160px;
+    }
+    input[type="text"].settings-input:focus,
+    input[type="number"].settings-input:focus,
+    select.settings-input:focus { border-color: var(--accent); }
+    input[type="checkbox"].settings-check {
+      width: 16px; height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .settings-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+    .btn-settings-save {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 9px 22px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter 0.2s;
+    }
+    .btn-settings-save:hover { filter: brightness(1.15); }
+    .btn-settings-save:disabled { opacity: 0.5; cursor: not-allowed; }
+    .settings-saved-msg {
+      font-size: 0.8rem;
+      color: var(--green);
+      margin-top: 8px;
+      display: none;
+    }
+    .settings-saved-msg.show { display: block; }
+    .settings-error-msg {
+      font-size: 0.8rem;
+      color: var(--red);
+      margin-top: 8px;
+      display: none;
+    }
+    .settings-error-msg.show { display: block; }
   </style>
 </head>
 <body>
@@ -591,6 +683,7 @@
     <div class="tabs">
       <div class="tab active" data-tab="tasks" onclick="switchTab('tasks')">Tasks</div>
       <div class="tab" data-tab="logs" onclick="switchTab('logs')">History</div>
+      <div class="tab" data-tab="settings" onclick="switchTab('settings')">Settings</div>
       <div class="tab" data-tab="serverlog" onclick="switchTab('serverlog')">Server Log</div>
     </div>
 
@@ -660,6 +753,120 @@
       <div class="card" id="logCard">
         <div id="logList"></div>
         <div class="pagination" id="logPagination"></div>
+      </div>
+    </div>
+
+    <!-- Settings tab -->
+    <div class="tab-pane" id="pane-settings">
+      <div class="card">
+        <!-- UI Preferences -->
+        <div class="settings-section">
+          <div class="settings-section-title">UI Preferences</div>
+
+          <div class="settings-row">
+            <label class="settings-label">Default Tab</label>
+            <select class="settings-input" id="setDefaultTab">
+              <option value="tasks">Tasks</option>
+              <option value="logs">History</option>
+              <option value="settings">Settings</option>
+              <option value="serverlog">Server Log</option>
+            </select>
+          </div>
+          <div class="settings-hint">Which tab to show when the page loads.</div>
+
+          <div class="settings-row">
+            <label class="settings-label">History Page Size</label>
+            <select class="settings-input" id="setHistoryPageSize">
+              <option value="10">10 records</option>
+              <option value="20">20 records</option>
+              <option value="50">50 records</option>
+              <option value="100">100 records</option>
+            </select>
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Show URL in Tasks</label>
+            <input type="checkbox" class="settings-check" id="setShowUrl" checked />
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Show Filename in Tasks</label>
+            <input type="checkbox" class="settings-check" id="setShowFilename" checked />
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Show Quality Badge</label>
+            <input type="checkbox" class="settings-check" id="setShowQuality" checked />
+          </div>
+
+          <div class="settings-actions">
+            <button type="button" class="btn-settings-save" onclick="saveUIPrefs()">Apply UI Preferences</button>
+          </div>
+          <div class="settings-saved-msg" id="uiSavedMsg">UI preferences saved (stored locally).</div>
+        </div>
+
+        <!-- Server Config -->
+        <div class="settings-section">
+          <div class="settings-section-title">Server Configuration</div>
+
+          <div class="settings-row">
+            <label class="settings-label">Video Directory</label>
+            <input type="text" class="settings-input" id="setVideoDir" style="min-width:260px;" />
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Music Directory</label>
+            <input type="text" class="settings-input" id="setMusicDir" style="min-width:260px;" />
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Disk Limit Enabled</label>
+            <input type="checkbox" class="settings-check" id="setDiskLimitEnabled" />
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Max Video Size (GB)</label>
+            <input type="number" class="settings-input" id="setMaxVideoGb" min="0" step="1" />
+            <label class="settings-label" style="margin-left:20px;min-width:auto;">Max Music Size (GB)</label>
+            <input type="number" class="settings-input" id="setMaxMusicGb" min="0" step="1" />
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Default Format</label>
+            <select class="settings-input" id="setDefaultFormat">
+              <option value="video">Video (MP4)</option>
+              <option value="audio">Audio Only (MP3)</option>
+            </select>
+            <label class="settings-label" style="margin-left:20px;min-width:auto;">Default Quality</label>
+            <select class="settings-input" id="setDefaultQuality">
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+              <option value="360p">360p</option>
+            </select>
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Plex Compatible</label>
+            <input type="checkbox" class="settings-check" id="setPlexCompatible" checked />
+          </div>
+
+          <div class="settings-row">
+            <label class="settings-label">Cleanup Policy</label>
+            <select class="settings-input" id="setCleanupPolicy">
+              <option value="oldest_first">Delete Oldest First</option>
+              <option value="skip">Skip (Reject Downloads)</option>
+            </select>
+            <label class="settings-label" style="margin-left:20px;min-width:auto;">Retention Days</label>
+            <input type="number" class="settings-input" id="setRetentionDays" min="0" step="1" style="min-width:80px;" />
+          </div>
+
+          <div class="settings-actions">
+            <button type="button" class="btn-settings-save" id="saveServerConfigBtn" onclick="saveServerConfig()">Save Server Config</button>
+          </div>
+          <div class="settings-saved-msg" id="serverSavedMsg">Server config saved successfully.</div>
+          <div class="settings-error-msg" id="serverErrorMsg"></div>
+        </div>
       </div>
     </div>
 
@@ -740,6 +947,10 @@
       statusText.textContent = "Online · Real-time";
       // Request current task list on connect
       socket.emit("request_tasks");
+      // Apply default tab from localStorage prefs
+      const savedPrefs = JSON.parse(localStorage.getItem('ydl_ui_prefs') || '{}');
+      const defaultTab = savedPrefs.defaultTab || 'tasks';
+      if (defaultTab !== 'tasks') switchTab(defaultTab);
     });
 
     socket.on("disconnect", () => {
@@ -766,7 +977,13 @@
       document.getElementById(`pane-${tab}`).classList.add("active");
       if (tab === "logs") loadHistory(1);
       if (tab === "serverlog") loadServerLog();
+      if (tab === "settings" && !_settingsLoaded) {
+        _settingsLoaded = true;
+        loadSettings();
+      }
     }
+
+    let _settingsLoaded = false;
 
     let titleFetchTimer = null;
     let logPage = 1;
@@ -814,6 +1031,13 @@
         list.innerHTML = '<div class="empty">No Tasks</div>';
         return;
       }
+
+      // Read visibility prefs
+      const prefs = JSON.parse(localStorage.getItem('ydl_ui_prefs') || '{}');
+      const showUrl = prefs.showUrl !== false;
+      const showFilename = prefs.showFilename !== false;
+      const showQuality = prefs.showQuality !== false;
+
       arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       list.innerHTML = arr.map(t => {
         const badge = {
@@ -840,22 +1064,31 @@
           ? `<div class="task-filename">&#128193; ${t.filename}</div>`
           : "";
 
-        const urlLabel = t.title
-          ? `<span class="task-url-label">URL</span>
-             <a class="task-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>`
-          : `<span class="task-url-label">URL</span>
-             <a class="task-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>`;
+        const urlLabel = showUrl ? (
+          `<div class="task-url-row">
+            <span class="task-url-label">URL</span>
+            <a class="task-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>
+          </div>`
+        ) : '';
+
+        const filenameHtml = showFilename && t.filename
+          ? `<div class="task-filename">&#128193; ${t.filename}</div>`
+          : '';
+
+        const qualityBadge = showQuality && t.quality
+          ? `<span class="log-badge" style="font-size:0.65rem;padding:2px 6px;border-radius:10px;background:#1a2a3a;color:#4488ff;margin-left:6px;">${t.quality}</span>`
+          : '';
 
         return `
           <div class="task">
             <div class="task-header">
-              <div class="task-title">${t.title || t.url || "Unknown"}</div>
+              <div class="task-title">${t.title || t.url || "Unknown"}${qualityBadge}</div>
               ${(t.format === 'audio' && t.filename && t.status === 'completed')
                 ? `<button class="btn-edit" onclick="openMetaModal('${t.filename.replace(/'/g, "\\'")}')">Edit Metadata</button>`
                 : ''}
               <span class="task-badge ${cls}">${badge}</span>
             </div>
-            <div class="task-url-row">${urlLabel}</div>
+            ${urlLabel}
             ${filenameHtml}
             <div class="progress-wrap">
               <div class="progress-bar" style="width:${t.progress || 0}%"></div>
@@ -883,6 +1116,11 @@
     socket.on("tasks_cleared", () => {
       // Refresh full list from server
       socket.emit("request_tasks");
+    });
+
+    socket.on("config_updated", (cfg) => {
+      _serverConfig = cfg;
+      populateServerConfig(cfg);
     });
 
     // ---- Download form ----
@@ -985,6 +1223,110 @@
         logList.innerHTML = '<div class="log-empty">Failed to load: ' + e.message + '</div>';
         pagination.innerHTML = '';
       }
+    }
+
+    // ---- Settings tab ----
+    let _serverConfig = null;
+
+    async function loadSettings() {
+      // Load server config from API
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          _serverConfig = await res.json();
+          populateServerConfig(_serverConfig);
+        }
+      } catch (e) {
+        console.error('Failed to load server config:', e);
+      }
+      // Load UI prefs from localStorage
+      loadUIPrefsFromStorage();
+    }
+
+    function populateServerConfig(cfg) {
+      if (!cfg) return;
+      document.getElementById('setVideoDir').value = cfg.video_dir || '';
+      document.getElementById('setMusicDir').value = cfg.music_dir || '';
+      document.getElementById('setDiskLimitEnabled').checked = !!cfg.disk_limit_enabled;
+      document.getElementById('setMaxVideoGb').value = cfg.max_video_size_gb ?? '';
+      document.getElementById('setMaxMusicGb').value = cfg.max_music_size_gb ?? '';
+      document.getElementById('setDefaultFormat').value = cfg.default_format || 'video';
+      document.getElementById('setDefaultQuality').value = cfg.default_quality || '1080p';
+      document.getElementById('setPlexCompatible').checked = !!cfg.plex_compatible;
+      document.getElementById('setCleanupPolicy').value = cfg.cleanup_policy || 'oldest_first';
+      document.getElementById('setRetentionDays').value = cfg.retention_days ?? '';
+    }
+
+    function loadUIPrefsFromStorage() {
+      const prefs = JSON.parse(localStorage.getItem('ydl_ui_prefs') || '{}');
+      document.getElementById('setDefaultTab').value = prefs.defaultTab || 'tasks';
+      document.getElementById('setHistoryPageSize').value = prefs.historyPageSize || '20';
+      document.getElementById('setShowUrl').checked = prefs.showUrl !== false;
+      document.getElementById('setShowFilename').checked = prefs.showFilename !== false;
+      document.getElementById('setShowQuality').checked = prefs.showQuality !== false;
+    }
+
+    async function saveUIPrefs() {
+      const prefs = {
+        defaultTab: document.getElementById('setDefaultTab').value,
+        historyPageSize: parseInt(document.getElementById('setHistoryPageSize').value),
+        showUrl: document.getElementById('setShowUrl').checked,
+        showFilename: document.getElementById('setShowFilename').checked,
+        showQuality: document.getElementById('setShowQuality').checked,
+      };
+      localStorage.setItem('ydl_ui_prefs', JSON.stringify(prefs));
+      // Reload history with new page size
+      if (currentTab === 'logs') loadHistory(1);
+      showSavedMsg('uiSavedMsg');
+    }
+
+    async function saveServerConfig() {
+      const btn = document.getElementById('saveServerConfigBtn');
+      const errEl = document.getElementById('serverErrorMsg');
+      const savedEl = document.getElementById('serverSavedMsg');
+      errEl.classList.remove('show');
+      savedEl.classList.remove('show');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      try {
+        const body = {
+          video_dir: document.getElementById('setVideoDir').value,
+          music_dir: document.getElementById('setMusicDir').value,
+          disk_limit_enabled: document.getElementById('setDiskLimitEnabled').checked,
+          max_video_size_gb: parseFloat(document.getElementById('setMaxVideoGb').value) || 0,
+          max_music_size_gb: parseFloat(document.getElementById('setMaxMusicGb').value) || 0,
+          default_format: document.getElementById('setDefaultFormat').value,
+          default_quality: document.getElementById('setDefaultQuality').value,
+          plex_compatible: document.getElementById('setPlexCompatible').checked,
+          cleanup_policy: document.getElementById('setCleanupPolicy').value,
+          retention_days: parseInt(document.getElementById('setRetentionDays').value) || 0,
+        };
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          _serverConfig = data.config;
+          showSavedMsg('serverSavedMsg');
+        } else {
+          errEl.textContent = 'Error: ' + (data.error || 'Unknown error');
+          errEl.classList.add('show');
+        }
+      } catch (e) {
+        errEl.textContent = 'Request failed: ' + e.message;
+        errEl.classList.add('show');
+      } finally {
+        btn.textContent = 'Save Server Config';
+        btn.disabled = false;
+      }
+    }
+
+    function showSavedMsg(id) {
+      const el = document.getElementById(id);
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 3000);
     }
 
     // ---- Server Log tab ----
