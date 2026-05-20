@@ -409,6 +409,51 @@
       color: var(--text2);
       font-size: 0.9rem;
     }
+
+    /* ---- Server Log tab ---- */
+    .server-log {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.75rem;
+      line-height: 1.6;
+      max-height: 70vh;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .server-log .log-line { margin: 0; }
+    .server-log .log-warn { color: var(--yellow); }
+    .server-log .log-error { color: var(--red); }
+    .server-log .log-info { color: var(--text2); }
+    .server-log-empty {
+      text-align: center;
+      padding: 30px 20px;
+      color: var(--text2);
+      font-size: 0.9rem;
+    }
+    .log-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .log-toolbar span {
+      font-size: 0.78rem;
+      color: var(--text2);
+    }
+    .log-refresh-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .log-refresh-btn:hover { border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -420,6 +465,7 @@
     <div class="tabs">
       <div class="tab active" data-tab="tasks" onclick="switchTab('tasks')">Tasks</div>
       <div class="tab" data-tab="logs" onclick="switchTab('logs')">History</div>
+      <div class="tab" data-tab="serverlog" onclick="switchTab('serverlog')">Server Log</div>
     </div>
 
     <!-- Task tab -->
@@ -483,6 +529,17 @@
         <div class="pagination" id="logPagination"></div>
       </div>
     </div>
+
+    <!-- Server Log tab -->
+    <div class="tab-pane" id="pane-serverlog">
+      <div class="card">
+        <div class="log-toolbar">
+          <span>logs/app.log</span>
+          <button class="log-refresh-btn" onclick="loadServerLog()">Refresh</button>
+        </div>
+        <div id="serverLogOutput"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Socket.IO client (bundled locally) -->
@@ -527,7 +584,8 @@
       document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
       document.querySelector(`.tab[data-tab="${tab}"]`).classList.add("active");
       document.getElementById(`pane-${tab}`).classList.add("active");
-      if (tab === "logs") loadHistorys(1);
+      if (tab === "logs") loadHistory(1);
+      if (tab === "serverlog") loadServerLog();
     }
 
     let titleFetchTimer = null;
@@ -688,7 +746,7 @@
     });
 
     // ---- History tab ----
-    async function loadHistorys(page) {
+    async function loadHistory(page) {
       logPage = page;
       const logList = document.getElementById("logList");
       const pagination = document.getElementById("logPagination");
@@ -707,20 +765,24 @@
         logList.innerHTML = data.items.map(item => {
           const badgeClass = item.format === 'audio' ? 'audio' : 'video';
           const badgeText = item.format === 'audio' ? 'MP3' : 'MP4';
-          const ext = item.filename ? item.filename.split('.').pop().toUpperCase() : '';
+          const sizeStr = item.size_mb ? `${item.size_mb} MB` : '';
+          const statusIcon = item.status === 'success'
+            ? '<span style="color:var(--green)">&#10004;</span>'
+            : '<span style="color:var(--red)">&#10008;</span>';
           return `
             <div class="log-item">
               <div class="log-header">
-                <div class="log-title">${item.title || item.url || 'Unknowntitle'}</div>
-                <span class="log-badge ${badgeClass}">${badgeText} · ${item.quality}</span>
+                <div class="log-title">${item.title || item.url || 'Unknown title'}</div>
+                <span class="log-badge ${badgeClass}">${badgeText} · ${item.quality || ''}</span>
               </div>
               <div class="log-meta">
-                <span>&#128196; Added: ${item.created_at}</span>
-                <span>&#10004; Completed: ${item.completed_at}</span>
-                <span>&#127916; ${ext || item.format.toUpperCase()}</span>
+                <span>${statusIcon} ${item.status || ''}</span>
+                <span>&#128196; ${item.ts ? item.ts.replace('T', ' ') : ''}</span>
+                ${sizeStr ? `<span>&#128190; ${sizeStr}</span>` : ''}
               </div>
               <div class="log-url">${item.url}</div>
               ${item.filename ? `<div class="log-path">${item.filename}</div>` : ''}
+              ${item.error ? `<div style="font-size:0.75rem;color:var(--red);margin-top:4px;">Error: ${item.error}</div>` : ''}
             </div>
           `;
         }).join('');
@@ -728,9 +790,9 @@
         // Pagination controls
         if (data.pages > 1) {
           pagination.innerHTML = `
-            <button onclick="loadHistorys(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>Prev</button>
+            <button onclick="loadHistory(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>Prev</button>
             <span class="page-info">Page ${data.page} / ${data.pages} (Total: ${data.total})</span>
-            <button onclick="loadHistorys(${data.page + 1})" ${data.page >= data.pages ? 'disabled' : ''}>Next</button>
+            <button onclick="loadHistory(${data.page + 1})" ${data.page >= data.pages ? 'disabled' : ''}>Next</button>
           `;
         } else {
           pagination.innerHTML = `<span class="page-info">Total: ${data.total} records</span>`;
@@ -739,6 +801,32 @@
         logList.innerHTML = '<div class="log-empty">Failed to load: ' + e.message + '</div>';
         pagination.innerHTML = '';
       }
+    }
+
+    // ---- Server Log tab ----
+    async function loadServerLog() {
+      const output = document.getElementById("serverLogOutput");
+      output.innerHTML = '<div class="server-log-empty"><span class="spinner"></span>Loading......</div>';
+      try {
+        const res = await fetch("/api/app-log?lines=200");
+        const data = await res.json();
+        if (!data.lines || data.lines.length === 0) {
+          output.innerHTML = '<div class="server-log-empty">No server log entries yet</div>';
+          return;
+        }
+        output.innerHTML = '<pre class="server-log">' + data.lines.map(line => {
+          const cls = line.includes(' [ERROR]') ? 'log-error'
+                     : line.includes(' [WARNING]') ? 'log-warn'
+                     : 'log-info';
+          return `<div class="log-line ${cls}">${escapeHtml(line)}</div>`;
+        }).join('') + '</pre>';
+      } catch (e) {
+        output.innerHTML = '<div class="server-log-empty">Failed to load: ' + e.message + '</div>';
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
   </script>
 </body>
