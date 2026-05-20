@@ -12,9 +12,11 @@ from flask_socketio import SocketIO, emit
 from tasks import task_manager
 import downloader
 import config
+from app_logging import get_logger
 
 # Load config
 cfg = config.load_config()
+log = get_logger("server")
 
 # Flask app
 app = Flask(__name__,
@@ -107,13 +109,13 @@ def start_download():
 
 @socketio.on("connect")
 def on_connect():
-    print(f"[WS] Client connected: {request.sid}")
+    log.info(f"Client connected: {request.sid}")
     emit("task_list", task_manager.get_all_tasks())
 
 
 @socketio.on("disconnect")
 def on_disconnect():
-    print(f"[WS] Client disconnected: {request.sid}")
+    log.info(f"Client disconnected: {request.sid}")
 
 
 @socketio.on("request_tasks")
@@ -133,11 +135,8 @@ if __name__ == "__main__":
     max_video = config.get_max_video_size_gb()
     max_music = config.get_max_music_size_gb()
 
-    print("=" * 50)
-    print("YouTube Downloader")
-    print(f"URL: http://{host}:{port}")
-    print(f"Video : {video_dir} (max {max_video} GB)")
-    print(f"Audio : {music_dir} (max {max_music} GB)")
-    print("=" * 50)
+    log.info("YouTube Downloader started on %s:%s", host, port)
+    log.info("Video : %s (max %s GB)", video_dir, max_video)
+    log.info("Audio : %s (max %s GB)", music_dir, max_music)
 
     socketio.run(app, host=host, port=port, debug=False)

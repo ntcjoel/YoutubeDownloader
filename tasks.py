@@ -1,12 +1,12 @@
 """
-Task management module
-All tasks stored in memory dict with state transitions and history
+Task management module - all tasks stored in memory dict with state transitions and history
 """
-
 import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+from app_logging import get_logger
+log = get_logger("tasks")
 from threading import Lock
 
 class TaskStatus(str, Enum):

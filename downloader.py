@@ -7,6 +7,10 @@ import glob
 import yt_dlp
 from tasks import task_manager, TaskStatus
 import config
+from app_logging import get_logger
+from app_logging.downloads import log_download
+
+log = get_logger("downloader")
 
 
 def _dir_size(path: str) -> float:
@@ -56,9 +60,9 @@ def _cleanup_if_needed(dir_path: str, max_size_gb: float, needed_gb: float = 1.0
         try:
             size = os.path.getsize(oldest_file)
             os.remove(oldest_file)
-            print(f"[cleanup] Removed {oldest_file} ({size / 1024**2:.1f} MB)")
+            log.warning("Cleanup removed %s (%.1f MB)", oldest_file, size / 1024**2)
         except OSError as e:
-            print(f"[cleanup] Failed to remove {oldest_file}: {e}")
+            log.error("Cleanup failed to remove %s: %s", oldest_file, e)
             return False
 
 
@@ -212,11 +216,19 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
     # Check / free disk space before downloading
     if max_size_gb > 0:
         if not _cleanup_if_needed(target_dir, max_size_gb):
+            msg = "Disk limit reached, no files to free"
             task.update(
                 status=TaskStatus.ERROR,
                 progress=0,
-                message="Disk limit reached, no files to free",
+                message=msg,
                 error="Disk limit exceeded"
+            )
+            log.error("Task %s failed: %s", task_id, msg)
+            log_download(
+                url=url, title=title, filename="",
+                fmt=format, quality=quality,
+                size_mb=0, duration_s=0,
+                status="failed", error=msg
             )
             _emit_update(task_id)
             return
@@ -225,6 +237,10 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([download_url])
 
+        # Get file size and duration
+        size_mb = os.path.getsize(out_path) / (1024 * 1024) if os.path.exists(out_path) else 0
+        duration_s = 0
+
         task.update(
             status=TaskStatus.COMPLETED,
             progress=100,
@@ -232,7 +248,21 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
             filename=out_path
         )
         task_manager.record_completed(task_id)
+        log.info("Task %s completed: %s -> %s (%.1f MB)", task_id, title, out_path, size_mb)
+        log_download(
+            url=url, title=title, filename=out_path,
+            fmt=format, quality=quality,
+            size_mb=size_mb, duration_s=duration_s,
+            status="success"
+        )
     except Exception as e:
+        log.error("Task %s failed: %s", task_id, e)
+        log_download(
+            url=url, title=title, filename="",
+            fmt=format, quality=quality,
+            size_mb=0, duration_s=0,
+            status="failed", error=str(e)
+        )
         task.update(
             status=TaskStatus.ERROR,
             progress=0,

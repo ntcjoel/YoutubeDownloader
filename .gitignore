@@ -3,4 +3,6 @@ __pycache__/
 *.pyc
 video/
 music/
+logs/
+*.log
 .DS_Store

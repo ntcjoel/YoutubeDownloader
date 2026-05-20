@@ -39,6 +39,7 @@ def load_config() -> dict:
         "port":          _env_int("PORT"),
         "video_dir":     os.environ.get("VIDEO_DIR"),
         "music_dir":     os.environ.get("MUSIC_DIR"),
+        "log_dir":       os.environ.get("LOG_DIR"),
         "max_video_size_gb": _env_float("MAX_VIDEO_SIZE_GB"),
         "max_music_size_gb": _env_float("MAX_MUSIC_SIZE_GB"),
         "cleanup_policy": os.environ.get("CLEANUP_POLICY"),
@@ -53,7 +54,7 @@ def load_config() -> dict:
 
     # Resolve relative paths relative to config file location
     config_dir = Path(path).parent.resolve()
-    for key in ("video_dir", "music_dir"):
+    for key in ("video_dir", "music_dir", "log_dir"):
         val = _CONFIG.get(key, "")
         if val and not os.path.isabs(val):
             _CONFIG[key] = str(config_dir / val)
@@ -68,6 +69,7 @@ def _get_defaults() -> dict:
         "port": 1917,
         "video_dir": str(base / "video"),
         "music_dir": str(base / "music"),
+        "log_dir":   str(base / "logs"),
         "max_video_size_gb": 50,
         "max_music_size_gb": 10,
         "cleanup_policy": "oldest_first",
@@ -107,6 +109,9 @@ def get_video_dir() -> str:
 
 def get_music_dir() -> str:
     return get("music_dir")
+
+def get_log_dir() -> str:
+    return get("log_dir")
 
 def get_max_video_size_gb() -> float:
     return float(get("max_video_size_gb", 50))
