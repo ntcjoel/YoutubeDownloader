@@ -3,6 +3,7 @@ Flask + Flask-SocketIO web server
 Configurable via config.yaml
 """
 import os
+import subprocess
 import eventlet
 eventlet.monkey_patch()
 
@@ -14,6 +15,7 @@ import downloader
 import config
 from app_logging import get_logger
 from app_logging.downloads import read_downloads, count_downloads
+import music_tagging
 
 # Load config
 cfg = config.load_config()
@@ -102,6 +104,94 @@ def get_app_log():
         all_lines = f.readlines()
     tail = all_lines[-lines:]
     return jsonify({"lines": [l.rstrip("\n") for l in tail]})
+
+
+@app.route("/api/metadata-form")
+def get_metadata_form():
+    """
+    Return current metadata for a music file, plus auto-filled suggestions from MusicBrainz.
+    Query params: filepath (URL-encoded absolute path)
+    """
+    filepath = request.args.get("filepath", "").strip()
+    if not filepath:
+        return jsonify({"error": "filepath is required"}), 400
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "File not found"}), 404
+
+    # Read current metadata from file using ffprobe
+    current = _read_current_metadata(filepath)
+
+    # Auto-fill from MusicBrainz
+    suggestion = music_tagging.auto_fill_metadata(filepath)
+    if suggestion:
+        # Merge: prefer existing values, fall back to suggestion
+        def _nvl(a, b): return a if (a and a.strip()) else b
+        suggestion = {
+            "artist": _nvl(current.get("artist"), suggestion.get("artist")),
+            "title": _nvl(current.get("title"), suggestion.get("title")),
+            "album": suggestion.get("album"),
+            "year": suggestion.get("year"),
+            "genre": suggestion.get("genre"),
+            "cover_url": suggestion.get("cover_url"),
+        }
+    else:
+        suggestion = current.copy()
+
+    return jsonify({
+        "filepath": filepath,
+        "current": current,
+        "suggestion": suggestion,
+    })
+
+
+@app.route("/api/save-metadata", methods=["POST"])
+def save_metadata():
+    """Save metadata to a music file. Expects JSON: {filepath, artist, title, album, year, genre, cover_url}"""
+    data = request.get_json()
+    filepath = data.get("filepath", "").strip()
+    if not filepath or not os.path.exists(filepath):
+        return jsonify({"error": "File not found"}), 404
+
+    success = music_tagging.write_metadata(
+        filepath,
+        artist=data.get("artist", "").strip() or None,
+        title=data.get("title", "").strip() or None,
+        album=data.get("album", "").strip() or None,
+        year=data.get("year", "").strip() or None,
+        genre=data.get("genre", "").strip() or None,
+        cover_url=data.get("cover_url", "").strip() or None,
+    )
+    if success:
+        log.info("Metadata saved: %s", filepath)
+        return jsonify({"ok": True})
+    else:
+        return jsonify({"error": "FFmpeg failed to write metadata"}), 500
+
+
+def _read_current_metadata(filepath: str) -> dict:
+    """Read existing metadata from a media file using ffprobe."""
+    import json as _json
+    cmd = [
+        "ffprobe", "-v", "quiet", "-print_format", "json",
+        "-show_format", filepath,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=15)
+        if result.returncode == 0:
+            info = _json.loads(result.stdout)
+            tags = info.get("format", {}).get("tags", {})
+            return {
+                "artist": tags.get("artist") or tags.get("TPE1"),
+                "title": tags.get("title") or tags.get("TIT2"),
+                "album": tags.get("album") or tags.get("TALB"),
+                "year": tags.get("date") or tags.get("TYER") or tags.get("TDRC"),
+                "genre": tags.get("genre") or tags.get("TCON"),
+                "cover_url": None,
+            }
+    except Exception:
+        pass
+    return {}
 
 
 @app.route("/download", methods=["POST"])

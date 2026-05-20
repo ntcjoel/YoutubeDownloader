@@ -454,6 +454,132 @@
       cursor: pointer;
     }
     .log-refresh-btn:hover { border-color: var(--accent); }
+
+    /* ---- Metadata editor modal ---- */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 32px;
+      width: 90%;
+      max-width: 520px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .modal-filepath {
+      font-size: 0.72rem;
+      color: var(--green);
+      word-break: break-all;
+      margin-bottom: 20px;
+    }
+    .modal-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: flex-end;
+    }
+    .modal-row .form-group { flex: 1; margin-bottom: 0; }
+    .modal-field {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: var(--text);
+      font-size: 0.88rem;
+      outline: none;
+    }
+    .modal-field:focus { border-color: var(--accent); }
+    .modal-label {
+      font-size: 0.72rem;
+      color: var(--text2);
+      margin-bottom: 4px;
+      display: block;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+    .btn-autofill {
+      background: #2a3a5a;
+      border: 1px solid var(--blue);
+      color: var(--blue);
+      border-radius: 7px;
+      padding: 9px 18px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: filter 0.2s;
+    }
+    .btn-autofill:hover { filter: brightness(1.2); }
+    .btn-save {
+      background: var(--green);
+      color: #000;
+      border: none;
+      border-radius: 7px;
+      padding: 9px 22px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter 0.2s;
+    }
+    .btn-save:hover { filter: brightness(1.15); }
+    .btn-cancel {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: 7px;
+      padding: 9px 18px;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .btn-cancel:hover { border-color: var(--text); }
+    .btn-edit {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-edit:hover { border-color: var(--accent); color: var(--accent); }
+    .autofill-spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .autofill-note { font-size: 0.72rem; color: var(--text2); margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -545,6 +671,53 @@
           <button class="log-refresh-btn" onclick="loadServerLog()">Refresh</button>
         </div>
         <div id="serverLogOutput"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metadata Editor Modal -->
+  <div class="modal-overlay" id="metaModal">
+    <div class="modal-box">
+      <div class="modal-title">Edit Metadata</div>
+      <div class="modal-filepath" id="metaFilepath"></div>
+
+      <div class="autofill-note">Click "Auto-fill" to query MusicBrainz, then edit any field and save.</div>
+
+      <div class="modal-row">
+        <div class="form-group">
+          <label class="modal-label">Artist</label>
+          <input type="text" class="modal-field" id="metaArtist" placeholder="Artist name" />
+        </div>
+        <div class="form-group">
+          <label class="modal-label">Title</label>
+          <input type="text" class="modal-field" id="metaTitle" placeholder="Track title" />
+        </div>
+      </div>
+      <div class="modal-row">
+        <div class="form-group">
+          <label class="modal-label">Album</label>
+          <input type="text" class="modal-field" id="metaAlbum" placeholder="Album name" />
+        </div>
+        <div class="form-group" style="flex:0 0 80px;">
+          <label class="modal-label">Year</label>
+          <input type="text" class="modal-field" id="metaYear" placeholder="2024" />
+        </div>
+      </div>
+      <div class="modal-row">
+        <div class="form-group">
+          <label class="modal-label">Genre</label>
+          <input type="text" class="modal-field" id="metaGenre" placeholder="Pop / Rock / etc." />
+        </div>
+        <div class="form-group">
+          <label class="modal-label">Cover URL</label>
+          <input type="text" class="modal-field" id="metaCover" placeholder="https://..." />
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-autofill" id="autofillBtn" onclick="doAutoFill()">Auto-fill</button>
+        <button class="btn-cancel" onclick="closeMetaModal()">Cancel</button>
+        <button class="btn-save" id="metaSaveBtn" onclick="doSaveMeta()">Save</button>
       </div>
     </div>
   </div>
@@ -677,6 +850,9 @@
           <div class="task">
             <div class="task-header">
               <div class="task-title">${t.title || t.url || "Unknown"}</div>
+              ${(t.format === 'audio' && t.filename && t.status === 'completed')
+                ? `<button class="btn-edit" onclick="openMetaModal('${t.filename.replace(/'/g, "\\'")}')">Edit Metadata</button>`
+                : ''}
               <span class="task-badge ${cls}">${badge}</span>
             </div>
             <div class="task-url-row">${urlLabel}</div>
@@ -836,6 +1012,93 @@
     function escapeHtml(str) {
       return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+
+    // ---- Metadata Editor Modal ----
+    let _metaCurrentFilepath = null;
+
+    function openMetaModal(filepath) {
+      _metaCurrentFilepath = filepath;
+      document.getElementById('metaFilepath').textContent = filepath;
+      document.getElementById('metaArtist').value = '';
+      document.getElementById('metaTitle').value = '';
+      document.getElementById('metaAlbum').value = '';
+      document.getElementById('metaYear').value = '';
+      document.getElementById('metaGenre').value = '';
+      document.getElementById('metaCover').value = '';
+      document.getElementById('autofillBtn').innerHTML = 'Auto-fill';
+      document.getElementById('autofillBtn').disabled = false;
+      document.getElementById('metaModal').classList.add('open');
+    }
+
+    function closeMetaModal() {
+      document.getElementById('metaModal').classList.remove('open');
+      _metaCurrentFilepath = null;
+    }
+
+    async function doAutoFill() {
+      if (!_metaCurrentFilepath) return;
+      const btn = document.getElementById('autofillBtn');
+      btn.innerHTML = '<span class="autofill-spinner"></span>Searching...';
+      btn.disabled = true;
+      try {
+        const resp = await fetch('/api/metadata-form?filepath=' + encodeURIComponent(_metaCurrentFilepath));
+        const data = await resp.json();
+        if (data.error) {
+          alert('Error: ' + data.error);
+        } else {
+          const s = data.suggestion;
+          if (s.artist) document.getElementById('metaArtist').value = s.artist;
+          if (s.title) document.getElementById('metaTitle').value = s.title;
+          if (s.album) document.getElementById('metaAlbum').value = s.album;
+          if (s.year) document.getElementById('metaYear').value = s.year;
+          if (s.genre) document.getElementById('metaGenre').value = s.genre;
+          if (s.cover_url) document.getElementById('metaCover').value = s.cover_url;
+        }
+      } catch (e) {
+        alert('Auto-fill failed: ' + e.message);
+      } finally {
+        btn.innerHTML = 'Auto-fill';
+        btn.disabled = false;
+      }
+    }
+
+    async function doSaveMeta() {
+      if (!_metaCurrentFilepath) return;
+      const saveBtn = document.getElementById('metaSaveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      try {
+        const resp = await fetch('/api/save-metadata', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            filepath: _metaCurrentFilepath,
+            artist: document.getElementById('metaArtist').value,
+            title: document.getElementById('metaTitle').value,
+            album: document.getElementById('metaAlbum').value,
+            year: document.getElementById('metaYear').value,
+            genre: document.getElementById('metaGenre').value,
+            cover_url: document.getElementById('metaCover').value,
+          }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          closeMetaModal();
+        } else {
+          alert('Save failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Save failed: ' + e.message);
+      } finally {
+        saveBtn.textContent = 'Save';
+        saveBtn.disabled = false;
+      }
+    }
+
+    // Close modal on overlay click
+    document.getElementById('metaModal').addEventListener('click', function(e) {
+      if (e.target === this) closeMetaModal();
+    });
   </script>
 </body>
 </html>
