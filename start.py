@@ -1,7 +1,7 @@
 """
-Flask + Flask-SocketIO Web服务器
-运行在 10.1.1.4:1917
-使用 eventlet 运行，支持真正的 WebSocket 推送
+Flask + Flask-SocketIO web server
+Running at 10.1.1.4:1917
+Using eventlet for true WebSocket push support
 """
 
 import os
@@ -34,7 +34,7 @@ socketio = SocketIO(
 downloader.set_broadcast_fn(socketio.emit)
 
 # ============================================================
-# HTTP 路由
+# HTTP Routes
 # ============================================================
 
 @app.route("/")
@@ -44,16 +44,16 @@ def index():
 
 @app.route("/tasks")
 def get_tasks():
-    """返回所有任务"""
+    """Return all tasks"""
     return jsonify(task_manager.get_all_tasks())
 
 
 @app.route("/title")
 def get_title():
-    """根据 URL 提取 YouTube 视频标题（用于输入时预览）"""
+    """Extract YouTube video title from URL for input preview"""
     url = request.args.get("url", "").strip()
     if not url:
-        return jsonify({"error": "URL 为空"}), 400
+        return jsonify({"error": "URL is empty"}), 400
     try:
         title = downloader.get_video_title(url)
         return jsonify({"title": title})
@@ -64,21 +64,21 @@ def get_title():
 @app.route("/clear", methods=["POST"])
 def clear_completed():
     task_manager.clear_completed()
-    # 广播清除事件，让所有客户端刷新任务列表
+    # Broadcast clear event to refresh all clients' task lists
     socketio.emit("tasks_cleared", {})
     return jsonify({"ok": True})
 
 
 @app.route("/logs")
 def get_logs():
-    """返回分页的下载历史"""
+    """Return paginated download history"""
     page = int(request.args.get("page", 1))
     return jsonify(task_manager.get_history(page))
 
 
 @app.route("/download", methods=["POST"])
 def start_download():
-    """接收下载请求"""
+    """Receive download request"""
     data = request.get_json()
     url = data.get("url", "").strip()
     fmt = data.get("format", "video")
@@ -86,11 +86,11 @@ def start_download():
     plex = data.get("plex_compatible", True)
 
     if not url:
-        return jsonify({"error": "URL 不能为空"}), 400
+        return jsonify({"error": "URL cannot be empty"}), 400
 
     task = task_manager.create_task(url, fmt, quality)
 
-    # 后台线程执行下载
+    # Run download in background thread
     t = threading.Thread(
         target=downloader.download_video,
         args=(task.id, url, fmt, quality, plex),
@@ -102,13 +102,13 @@ def start_download():
 
 
 # ============================================================
-# WebSocket 事件
+# WebSocket Events
 # ============================================================
 
 @socketio.on("connect")
 def on_connect():
     print(f"[WS] Client connected: {request.sid}")
-    # 客户端连接后立即推送当前所有任务
+    # Push full task list on connect
     emit("task_list", task_manager.get_all_tasks())
 
 
@@ -119,12 +119,12 @@ def on_disconnect():
 
 @socketio.on("request_tasks")
 def on_request_tasks():
-    """客户端主动请求任务列表"""
+    """Client requests current task list"""
     emit("task_list", task_manager.get_all_tasks())
 
 
 # ============================================================
-# 启动
+# Entry Point
 # ============================================================
 
 if __name__ == "__main__":

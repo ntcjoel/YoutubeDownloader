@@ -1,6 +1,6 @@
 """
-任务管理模块
-所有任务存储在内存字典中，支持状态流转和历史记录
+Task management module
+All tasks stored in memory dict with state transitions and history
 """
 
 import uuid
@@ -10,22 +10,22 @@ from typing import Optional
 from threading import Lock
 
 class TaskStatus(str, Enum):
-    PENDING = "pending"          # 等待中
-    DOWNLOADING = "downloading"  # 下载中
-    PROCESSING = "processing"    # 处理中（如合并）
-    COMPLETED = "completed"      # 完成
-    ERROR = "error"              # 错误
+    PENDING = "pending"
+    DOWNLOADING = "downloading"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    ERROR = "error"
 
 class Task:
     def __init__(self, url: str, format: str, quality: str = "1080p", title: str = None):
         self.id = str(uuid.uuid4())[:8]
         self.url = url
-        self.title = title        # 视频标题
-        self.format = format          # "video" or "audio"
-        self.quality = quality        # "1080p", "720p", etc.
+        self.title = title
+        self.format = format
+        self.quality = quality
         self.status = TaskStatus.PENDING
         self.progress = 0
-        self.message = "等待中..."
+        self.message = "Pending..."
         self.filename: Optional[str] = None
         self.error: Optional[str] = None
         self.created_at = datetime.now().strftime("%H:%M:%S")
@@ -72,9 +72,9 @@ class TaskManager:
     def __init__(self):
         self._tasks: dict[str, Task] = {}
         self._lock = Lock()
-        self._processing_queue: list[str] = []   # 等待处理的任务ID队列
+        self._processing_queue: list[str] = []
         self._current_task_id: Optional[str] = None
-        self._history: list[dict] = []            # 完成的下载历史（分页）
+        self._history: list[dict] = []
         self._history_page_size = 10
 
     def create_task(self, url: str, format: str, quality: str = "1080p") -> Task:
@@ -88,7 +88,7 @@ class TaskManager:
         return self._tasks.get(task_id)
 
     def get_all_tasks(self) -> list[dict]:
-        """返回所有任务，按创建时间倒序"""
+        """Return all tasks sorted by creation time (newest first)"""
         with self._lock:
             return sorted(
                 [t.to_dict() for t in self._tasks.values()],
@@ -97,7 +97,7 @@ class TaskManager:
             )
 
     def get_pending_tasks(self) -> list[str]:
-        """返回等待处理的任务ID列表（不含正在处理的）"""
+        """Return pending task IDs (excluding current running task)"""
         with self._lock:
             return [tid for tid in self._processing_queue
                     if tid != self._current_task_id and
@@ -110,7 +110,7 @@ class TaskManager:
         self._current_task_id = task_id
 
     def mark_running(self, task_id: str):
-        """标记任务为当前运行状态"""
+        """Mark task as currently running"""
         with self._lock:
             self._current_task_id = task_id
 
@@ -124,7 +124,7 @@ class TaskManager:
                 self._current_task_id = None
 
     def clear_completed(self):
-        """清除所有已完成和错误的任务"""
+        """Remove all completed and error tasks"""
         with self._lock:
             completed = [tid for tid, t in self._tasks.items()
                          if t.status in (TaskStatus.COMPLETED, TaskStatus.ERROR)]
@@ -134,7 +134,7 @@ class TaskManager:
                     self._processing_queue.remove(tid)
 
     def record_completed(self, task_id: str):
-        """将完成的任务记入历史记录"""
+        """Record completed task in history"""
         with self._lock:
             task = self._tasks.get(task_id)
             if not task:
@@ -150,12 +150,12 @@ class TaskManager:
                 "created_at": task.created_at,
                 "completed_at": task.updated_at,
             })
-            # 最多保留 200 条
+            # Keep max 200 entries
             if len(self._history) > 200:
                 self._history = self._history[:200]
 
     def get_history(self, page: int = 1) -> dict:
-        """返回分页后的历史记录"""
+        """Return paginated history"""
         with self._lock:
             total = len(self._history)
             start = (page - 1) * self._history_page_size
@@ -169,5 +169,5 @@ class TaskManager:
             }
 
 
-# 全局单例
+# Global singleton
 task_manager = TaskManager()

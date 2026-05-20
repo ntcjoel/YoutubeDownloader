@@ -319,7 +319,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ---- Log tab ---- */
+    /* ---- History tab ---- */
     .log-list { display: flex; flex-direction: column; gap: 8px; }
 
     .log-item {
@@ -418,15 +418,15 @@
 
     <!-- Tabs -->
     <div class="tabs">
-      <div class="tab active" data-tab="tasks" onclick="switchTab('tasks')">任务</div>
-      <div class="tab" data-tab="logs" onclick="switchTab('logs')">Log</div>
+      <div class="tab active" data-tab="tasks" onclick="switchTab('tasks')">Tasks</div>
+      <div class="tab" data-tab="logs" onclick="switchTab('logs')">History</div>
     </div>
 
     <!-- Task tab -->
     <div class="tab-pane active" id="pane-tasks">
       <div class="status-bar">
         <div class="dot" id="statusDot"></div>
-        <span id="statusText">连接中...</span>
+        <span id="statusText">Connecting......</span>
       </div>
 
       <div class="card">
@@ -441,9 +441,9 @@
 
           <div class="plex-row">
             <input type="checkbox" id="plexCheck" checked />
-            <label for="plexCheck">Plex Server 兼容</label>
+            <label for="plexCheck">Plex Server Compatible</label>
           </div>
-          <div class="plex-hint">优先使用 H.264/AAC 编码，输出 MP4 格式，方便 Plex 媒体库识别</div>
+          <div class="plex-hint">Prioritize H.264/AAC encoding, output MP4 format for Plex compatibility</div>
 
           <div class="row">
             <div class="form-group">
@@ -463,20 +463,20 @@
               </select>
             </div>
           </div>
-          <button type="submit" class="btn" id="submitBtn">开始下载</button>
+          <button type="submit" class="btn" id="submitBtn">Download</button>
         </form>
       </div>
 
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <span style="font-size:0.85rem; color:var(--text2);">任务历史</span>
-          <button class="btn btn-clear" id="clearBtn">清除已完成</button>
+          <span style="font-size:0.85rem; color:var(--text2);">TasksHistory</span>
+          <button class="btn btn-clear" id="clearBtn">Clear Completed</button>
         </div>
         <div id="taskList"></div>
       </div>
     </div>
 
-    <!-- Log tab -->
+    <!-- History tab -->
     <div class="tab-pane" id="pane-logs">
       <div class="card" id="logCard">
         <div id="logList"></div>
@@ -500,19 +500,19 @@
 
     socket.on("connect", () => {
       statusDot.className = "dot active";
-      statusText.textContent = "在线 · 实时推送";
+      statusText.textContent = "Online · Real-time";
       // Request current task list on connect
       socket.emit("request_tasks");
     });
 
     socket.on("disconnect", () => {
       statusDot.className = "dot error";
-      statusText.textContent = "断开 · 正在重连...";
+      statusText.textContent = "Disconnected · Reconnecting......";
     });
 
     socket.on("connect_error", () => {
       statusDot.className = "dot error";
-      statusText.textContent = "连接失败";
+      statusText.textContent = "Connection failed";
     });
 
     // ---- Task state ----
@@ -527,7 +527,7 @@
       document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
       document.querySelector(`.tab[data-tab="${tab}"]`).classList.add("active");
       document.getElementById(`pane-${tab}`).classList.add("active");
-      if (tab === "logs") loadLogs(1);
+      if (tab === "logs") loadHistorys(1);
     }
 
     let titleFetchTimer = null;
@@ -540,7 +540,7 @@
         return;
       }
       const el = document.getElementById("titlePreview");
-      el.innerHTML = '<span class="spinner"></span>提取标题...';
+      el.innerHTML = '<span class="spinner"></span>Fetching title......';
       el.className = "loading";
       try {
         const resp = await fetch("/title?url=" + encodeURIComponent(url));
@@ -549,11 +549,11 @@
           el.textContent = data.title;
           el.className = "";
         } else {
-          el.textContent = "无法提取标题";
+          el.textContent = "Cannot Fetching title...";
           el.className = "error";
         }
       } catch (e) {
-        el.textContent = "标题提取失败";
+        el.textContent = "Failed to fetch title";
         el.className = "error";
       }
     }
@@ -573,17 +573,17 @@
       const list = document.getElementById("taskList");
       const arr = Object.values(tasks);
       if (arr.length === 0) {
-        list.innerHTML = '<div class="empty">暂无任务</div>';
+        list.innerHTML = '<div class="empty">No Tasks</div>';
         return;
       }
       arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       list.innerHTML = arr.map(t => {
         const badge = {
-          pending: "等待中",
-          downloading: "下载中",
-          processing: "处理中",
-          completed: "完成",
-          error: "错误",
+          pending: "Pending",
+          downloading: "Downloading",
+          processing: "Processing",
+          completed: "Completed",
+          error: "Error",
         }[t.status] || t.status;
 
         const cls = {
@@ -611,7 +611,7 @@
         return `
           <div class="task">
             <div class="task-header">
-              <div class="task-title">${t.title || t.url || "未知"}</div>
+              <div class="task-title">${t.title || t.url || "Unknown"}</div>
               <span class="task-badge ${cls}">${badge}</span>
             </div>
             <div class="task-url-row">${urlLabel}</div>
@@ -658,7 +658,7 @@
         ? titleEl.textContent : null;
 
       document.getElementById("submitBtn").disabled = true;
-      document.getElementById("submitBtn").textContent = "提交中...";
+      document.getElementById("submitBtn").textContent = "Submitting......";
 
       try {
         const res = await fetch("/download", {
@@ -668,17 +668,17 @@
         });
         const data = await res.json();
         if (!res.ok) {
-          alert("错误: " + (data.error || "未知错误"));
+          alert("Error: " + (data.error || "UnknownError"));
         } else if (data.task && previewTitle) {
           data.task.title = previewTitle;
           tasks[data.task.id] = data.task;
           renderTasks();
         }
       } catch (err) {
-        alert("请求失败: " + err.message);
+        alert("Request failed: " + err.message);
       } finally {
         document.getElementById("submitBtn").disabled = false;
-        document.getElementById("submitBtn").textContent = "开始下载";
+        document.getElementById("submitBtn").textContent = "Download";
       }
     });
 
@@ -687,19 +687,19 @@
       await fetch("/clear", { method: "POST" });
     });
 
-    // ---- Log tab ----
-    async function loadLogs(page) {
+    // ---- History tab ----
+    async function loadHistorys(page) {
       logPage = page;
       const logList = document.getElementById("logList");
       const pagination = document.getElementById("logPagination");
-      logList.innerHTML = '<div class="log-empty"><span class="spinner"></span>加载中...</div>';
+      logList.innerHTML = '<div class="log-empty"><span class="spinner"></span>Loading......</div>';
 
       try {
         const res = await fetch(`/logs?page=${page}`);
         const data = await res.json();
 
         if (!data.items || data.items.length === 0) {
-          logList.innerHTML = '<div class="log-empty">暂无下载记录</div>';
+          logList.innerHTML = '<div class="log-empty">No download records</div>';
           pagination.innerHTML = '';
           return;
         }
@@ -711,12 +711,12 @@
           return `
             <div class="log-item">
               <div class="log-header">
-                <div class="log-title">${item.title || item.url || '未知标题'}</div>
+                <div class="log-title">${item.title || item.url || 'Unknowntitle'}</div>
                 <span class="log-badge ${badgeClass}">${badgeText} · ${item.quality}</span>
               </div>
               <div class="log-meta">
-                <span>&#128196; 添加: ${item.created_at}</span>
-                <span>&#10004; 完成: ${item.completed_at}</span>
+                <span>&#128196; Added: ${item.created_at}</span>
+                <span>&#10004; Completed: ${item.completed_at}</span>
                 <span>&#127916; ${ext || item.format.toUpperCase()}</span>
               </div>
               <div class="log-url">${item.url}</div>
@@ -728,15 +728,15 @@
         // Pagination controls
         if (data.pages > 1) {
           pagination.innerHTML = `
-            <button onclick="loadLogs(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>上一页</button>
-            <span class="page-info">第 ${data.page} / ${data.pages} 页 (共 ${data.total} 条)</span>
-            <button onclick="loadLogs(${data.page + 1})" ${data.page >= data.pages ? 'disabled' : ''}>下一页</button>
+            <button onclick="loadHistorys(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>Prev</button>
+            <span class="page-info">Page ${data.page} / ${data.pages} (Total: ${data.total})</span>
+            <button onclick="loadHistorys(${data.page + 1})" ${data.page >= data.pages ? 'disabled' : ''}>Next</button>
           `;
         } else {
-          pagination.innerHTML = `<span class="page-info">共 ${data.total} 条记录</span>`;
+          pagination.innerHTML = `<span class="page-info">Total: ${data.total} records</span>`;
         }
       } catch (e) {
-        logList.innerHTML = '<div class="log-empty">加载失败: ' + e.message + '</div>';
+        logList.innerHTML = '<div class="log-empty">Failed to load: ' + e.message + '</div>';
         pagination.innerHTML = '';
       }
     }

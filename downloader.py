@@ -1,6 +1,5 @@
 """
-下载核心模块
-使用 yt-dlp 进行下载，支持进度回调
+Download core module using yt-dlp with progress callbacks
 """
 
 import os
@@ -8,7 +7,7 @@ import re
 import yt_dlp
 from tasks import task_manager, TaskStatus
 
-# 项目根目录
+# Project base directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VIDEO_DIR = os.path.join(BASE_DIR, "video")
 MUSIC_DIR = os.path.join(BASE_DIR, "music")
@@ -16,7 +15,7 @@ MUSIC_DIR = os.path.join(BASE_DIR, "music")
 os.makedirs(VIDEO_DIR, exist_ok=True)
 os.makedirs(MUSIC_DIR, exist_ok=True)
 
-# broadcaster 由 app.py 注入
+# broadcaster injected by app.py
 _broadcast_fn = None
 
 def set_broadcast_fn(fn):
@@ -25,7 +24,7 @@ def set_broadcast_fn(fn):
 
 
 def _emit_update(task_id):
-    """通知任务状态变化"""
+    """Notify task state change"""
     if _broadcast_fn is None:
         return
     task = task_manager.get_task(task_id)
@@ -34,7 +33,7 @@ def _emit_update(task_id):
 
 
 def make_progress_hook(task_id):
-    """生成 yt-dlp 的 progress_hook，回调通知任务进度"""
+    """Generate yt-dlp progress_hook with task state updates"""
     def hook(d):
         if d["status"] == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
@@ -44,25 +43,25 @@ def make_progress_hook(task_id):
                 task_manager.get_task(task_id).update(
                     status=TaskStatus.DOWNLOADING,
                     progress=pct,
-                    message=f"下载中... {pct}%"
+                    message=f"Downloading... {pct}%"
                 )
             else:
                 task_manager.get_task(task_id).update(
                     status=TaskStatus.DOWNLOADING,
-                    message="下载中..."
+                    message="Downloading..."
                 )
         elif d["status"] == "finished":
             task_manager.get_task(task_id).update(
                 status=TaskStatus.PROCESSING,
                 progress=100,
-                message="处理中..."
+                message="Processing..."
             )
         _emit_update(task_id)
     return hook
 
 
 def get_video_title(url: str) -> str:
-    """从 URL 获取视频标题用于文件名"""
+    """Extract video title from URL for filename"""
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
@@ -78,7 +77,7 @@ def get_video_title(url: str) -> str:
 
 
 def clean_youtube_url(url: str) -> str:
-    """移除播放列表参数，避免 yt-dlp 解析整个列表"""
+    """Remove playlist params to avoid downloading entire playlist"""
     url = re.sub(r'[?&]list=[^&]*', '', url)
     url = re.sub(r'[?&]start_radio=[^&]*', '', url)
     url = re.sub(r'\?$', '', url)
@@ -87,21 +86,21 @@ def clean_youtube_url(url: str) -> str:
 
 def download_video(task_id: str, url: str, format: str, quality: str, plex_compatible: bool = True):
     """
-    执行下载任务
-    format: "video" -> 合并后mp4存video/
-           "audio" -> 纯音频mp3存music/
-    plex_compatible: True 时优先使用 H.264/AAC MP4（避免 AV1/WebM）
+    Execute download task
+    format: "video" -> merged mp4 saved to video/
+           "audio" -> mp3 saved to music/
+    plex_compatible: True prefers H.264/AAC MP4 output (avoids AV1/WebM)
     """
     task = task_manager.get_task(task_id)
     if not task:
         return
 
-    task.update(status=TaskStatus.DOWNLOADING, progress=0, message="初始化...")
+    task.update(status=TaskStatus.DOWNLOADING, progress=0, message="Initializing...")
 
-    # 清理 URL
+    # Clean URL
     clean_url = clean_youtube_url(url)
 
-    # 获取标题并存储
+    # Fetch and store title
     title = get_video_title(clean_url)
     task.update(title=title)
     _emit_update(task_id)
@@ -129,8 +128,9 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
     else:
         max_height = quality.replace("p", "")
         if plex_compatible:
-            # Plex 兼容：优先 H.264 + AAC，直接合并为 MP4
-            # YouTube 1080p 通常没有独立 H.264 流，回退到 bestvideo+bestaudio 再转 MP4
+            # Plex compatible: prefer H.264 + AAC, merge to MP4
+            # YouTube 1080p usually has no standalone H.264 stream,
+            # falls back to bestvideo+bestaudio then remux to MP4
             video_format = (
                 f"bestvideo[height<={max_height}][vcodec=h264]+bestaudio[acodec=mp4a]/"
                 f"bestvideo[height<={max_height}][vcodec=h264]+bestaudio[acodec=aac]/"
@@ -158,7 +158,7 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
         task.update(
             status=TaskStatus.COMPLETED,
             progress=100,
-            message="下载完成",
+            message="Download complete",
             filename=out_path
         )
         task_manager.record_completed(task_id)
@@ -166,7 +166,7 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
         task.update(
             status=TaskStatus.ERROR,
             progress=0,
-            message="下载失败",
+            message="Download failed",
             error=str(e)
         )
     _emit_update(task_id)
