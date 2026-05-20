@@ -40,6 +40,7 @@ def load_config() -> dict:
         "video_dir":     os.environ.get("VIDEO_DIR"),
         "music_dir":     os.environ.get("MUSIC_DIR"),
         "log_dir":       os.environ.get("LOG_DIR"),
+        "disk_limit_enabled": _env_bool("DISK_LIMIT_ENABLED"),
         "max_video_size_gb": _env_float("MAX_VIDEO_SIZE_GB"),
         "max_music_size_gb": _env_float("MAX_MUSIC_SIZE_GB"),
         "cleanup_policy": os.environ.get("CLEANUP_POLICY"),
@@ -70,6 +71,7 @@ def _get_defaults() -> dict:
         "video_dir": str(base / "video"),
         "music_dir": str(base / "music"),
         "log_dir":   str(base / "logs"),
+        "disk_limit_enabled": False,
         "max_video_size_gb": 50,
         "max_music_size_gb": 10,
         "cleanup_policy": "oldest_first",
@@ -121,3 +123,6 @@ def get_max_music_size_gb() -> float:
 
 def get_cleanup_policy() -> str:
     return get("cleanup_policy", "oldest_first")
+
+def get_disk_limit_enabled() -> bool:
+    return bool(get("disk_limit_enabled", False))

@@ -5,15 +5,19 @@ host: "0.0.0.0"
 port: 1917
 
 # Directory paths (absolute or relative to project root)
-video_dir: "video"
-music_dir: "music"
+video_dir: "/mnt/nfs/pt/ytb_video"
+music_dir: "/mnt/nfs/pt/ytb_music"
 log_dir: "logs"
 
-# Disk usage limits (in GB, 0 = no limit)
+# Disk limit switch: true = enforce max size limits below
+#   false = no size limits (NFS/remote storage manages its own space)
+disk_limit_enabled: false
+
+# Disk usage limits (in GB, only used when disk_limit_enabled: true)
 max_video_size_gb: 50
 max_music_size_gb: 10
 
-# Cleanup policy when limit is exceeded
+# Cleanup policy when limit is exceeded (only when disk_limit_enabled: true)
 #   oldest_first  - delete oldest completed files until under limit
 #   skip          - reject new downloads when at limit
 cleanup_policy: "oldest_first"

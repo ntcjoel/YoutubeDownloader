@@ -222,8 +222,8 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
         out_path = os.path.join(target_dir, f"{safe_name}.mp4")
         download_url = clean_url
 
-    # Check / free disk space before downloading
-    if max_size_gb > 0:
+    # Check / free disk space before downloading (only when disk limit is enabled)
+    if config.get_disk_limit_enabled() and max_size_gb > 0:
         if not _cleanup_if_needed(target_dir, max_size_gb):
             msg = "Disk limit reached, no files to free"
             task.update(
