@@ -485,6 +485,13 @@
             <div id="titlePreview"></div>
           </div>
 
+          <div class="form-group">
+            <label>Custom Filename <span style="font-weight:400;text-transform:none;font-size:0.75em;color:var(--text2)">(optional, leave blank to use video title)</span></label>
+            <input type="text" id="customNameInput"
+              placeholder="my_video"
+              value="" />
+          </div>
+
           <div class="plex-row">
             <input type="checkbox" id="plexCheck" checked />
             <label for="plexCheck">Plex Server Compatible</label>
@@ -709,6 +716,7 @@
       const format = document.getElementById("formatSelect").value;
       const quality = document.getElementById("qualitySelect").value;
       const plex = document.getElementById("plexCheck").checked;
+      const customName = document.getElementById("customNameInput").value.trim();
       if (!url) return;
 
       const titleEl = document.getElementById("titlePreview");
@@ -722,7 +730,7 @@
         const res = await fetch("/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, format, quality, plex_compatible: plex }),
+          body: JSON.stringify({ url, format, quality, plex_compatible: plex, custom_name: customName }),
         });
         const data = await res.json();
         if (!res.ok) {

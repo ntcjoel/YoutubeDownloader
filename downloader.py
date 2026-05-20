@@ -140,7 +140,7 @@ def clean_youtube_url(url: str) -> str:
     return url
 
 
-def download_video(task_id: str, url: str, format: str, quality: str, plex_compatible: bool = True):
+def download_video(task_id: str, url: str, format: str, quality: str, plex_compatible: bool = True, custom_name: str = ""):
     """
     Execute download task
     format: "video" -> merged mp4 saved to video/
@@ -163,14 +163,23 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
     task.update(title=title)
     _emit_update(task_id)
     safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
+    # Determine filename: custom_name takes priority, otherwise use YouTube title
+    if custom_name:
+        # Strip extension if user included it
+        base = custom_name
+        if base.lower().endswith((".mp4", ".mp3", ".webm", ".mkv")):
+            base = base.rsplit(".", 1)[0]
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in base)
+    else:
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
 
-    outtmpl_video = os.path.join(config.get_video_dir(), f"{safe_title}.%(ext)s")
-    outtmpl_audio = os.path.join(config.get_music_dir(), f"{safe_title}.%(ext)s")
+    outtmpl_video = os.path.join(config.get_video_dir(), f"{safe_name}.%(ext)s")
+    outtmpl_audio = os.path.join(config.get_music_dir(), f"{safe_name}.%(ext)s")
 
     if format == "audio":
         target_dir = config.get_music_dir()
         max_size_gb = config.get_max_music_size_gb()
-        out_path = os.path.join(target_dir, f"{safe_title}.mp3")
+        out_path = os.path.join(target_dir, f"{safe_name}.mp3")
         ydl_opts = {
             "format": "bestaudio/best",
             "outtmpl": outtmpl_audio,
@@ -210,7 +219,7 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
             "merge_output_format": "mp4",
             "progress_hooks": [make_progress_hook(task_id)],
         }
-        out_path = os.path.join(target_dir, f"{safe_title}.mp4")
+        out_path = os.path.join(target_dir, f"{safe_name}.mp4")
         download_url = clean_url
 
     # Check / free disk space before downloading

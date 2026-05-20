@@ -120,7 +120,7 @@ def start_download():
 
     t = threading.Thread(
         target=downloader.download_video,
-        args=(task.id, url, fmt, quality, plex),
+        args=(task.id, url, fmt, quality, plex, data.get("custom_name", "")),
         daemon=True
     )
     t.start()
