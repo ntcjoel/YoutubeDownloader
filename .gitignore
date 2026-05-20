@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+video/
+music/
+.DS_Store

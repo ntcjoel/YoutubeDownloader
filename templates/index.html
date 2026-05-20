@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Downloader</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface2: #252525;
+      --border: #333;
+      --accent: #ff4444;
+      --accent2: #ff7733;
+      --text: #e0e0e0;
+      --text2: #888;
+      --green: #44cc66;
+      --yellow: #ffcc33;
+      --red: #ff4444;
+      --blue: #4488ff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    .container { width: 100%; max-width: 680px; }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: #fff;
+    }
+
+    .subtitle {
+      color: var(--text2);
+      font-size: 0.85rem;
+      margin-bottom: 24px;
+    }
+
+    /* ---- Tabs ---- */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text2);
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+      user-select: none;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active {
+      color: #fff;
+      border-bottom-color: var(--accent);
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .form-group { margin-bottom: 16px; }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text2);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="text"], select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus, select:focus { border-color: var(--accent); }
+
+    /* Title preview */
+    #titlePreview {
+      font-size: 0.85rem;
+      color: var(--green);
+      min-height: 1.2em;
+      margin-top: 4px;
+      word-break: break-all;
+    }
+    #titlePreview.loading { color: var(--text2); font-style: italic; }
+    #titlePreview.error { color: var(--red); }
+
+    /* Plex checkbox */
+    .plex-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .plex-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .plex-row label {
+      display: inline;
+      font-size: 0.85rem;
+      color: var(--text);
+      text-transform: none;
+      letter-spacing: 0;
+      cursor: pointer;
+      margin-bottom: 0;
+    }
+    .plex-hint {
+      font-size: 0.75rem;
+      color: var(--text2);
+      margin-left: 24px;
+      margin-top: -8px;
+      margin-bottom: 16px;
+    }
+
+    .row { display: flex; gap: 12px; }
+    .row .form-group { flex: 1; margin-bottom: 0; }
+
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 28px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter 0.2s, transform 0.1s;
+      margin-top: 20px;
+      width: 100%;
+    }
+
+    .btn:hover { filter: brightness(1.15); }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-clear {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      padding: 8px 20px;
+      font-size: 0.85rem;
+      width: auto;
+      margin-top: 12px;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text2);
+      margin-bottom: 20px;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text2);
+    }
+    .dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.error  { background: var(--red); }
+
+    .task-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .task {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .task-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #fff;
+      word-break: break-word;
+      flex: 1;
+      padding-right: 12px;
+    }
+
+    .task-badge {
+      font-size: 0.7rem;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .badge-pending { background: #333; color: #888; }
+    .badge-downloading { background: #1a3a1a; color: var(--green); border: 1px solid var(--green); }
+    .badge-processing { background: #3a2a00; color: var(--yellow); border: 1px solid var(--yellow); }
+    .badge-completed { background: #1a2a1a; color: var(--green); }
+    .badge-error { background: #2a1a1a; color: var(--red); }
+
+    /* URL row */
+    .task-url-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .task-url-label {
+      font-size: 0.7rem;
+      color: var(--text2);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .task-url {
+      font-size: 0.75rem;
+      color: var(--text2);
+      text-decoration: none;
+      word-break: break-all;
+      flex: 1;
+      cursor: pointer;
+      border-bottom: 1px dashed var(--border);
+      transition: color 0.2s;
+    }
+    .task-url:hover { color: var(--accent); }
+
+    /* Filename */
+    .task-filename {
+      font-size: 0.75rem;
+      color: var(--green);
+      margin-bottom: 10px;
+      word-break: break-all;
+    }
+
+    .progress-wrap {
+      background: var(--surface2);
+      border-radius: 6px;
+      height: 6px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 6px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    .task-message {
+      font-size: 0.8rem;
+      color: var(--text2);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .task-error { color: var(--red); }
+
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text2);
+      font-size: 0.9rem;
+    }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---- Log tab ---- */
+    .log-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .log-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 6px;
+    }
+
+    .log-title {
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: #fff;
+      word-break: break-word;
+      flex: 1;
+      padding-right: 10px;
+    }
+
+    .log-badge {
+      font-size: 0.68rem;
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .log-badge.video { background: #1a2a3a; color: var(--blue); }
+    .log-badge.audio { background: #2a1a3a; color: #aa66cc; }
+
+    .log-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      font-size: 0.75rem;
+      color: var(--text2);
+      margin-bottom: 4px;
+    }
+    .log-meta span { white-space: nowrap; }
+    .log-path {
+      font-size: 0.72rem;
+      color: var(--green);
+      word-break: break-all;
+      margin-top: 4px;
+    }
+    .log-url {
+      font-size: 0.72rem;
+      color: var(--text2);
+      text-decoration: none;
+      border-bottom: 1px dashed var(--border);
+    }
+    .log-url:hover { color: var(--accent); }
+
+    /* Pagination */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      font-size: 0.85rem;
+      color: var(--text2);
+    }
+    .pagination button {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: border-color 0.2s;
+    }
+    .pagination button:hover:not(:disabled) { border-color: var(--accent); }
+    .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .pagination .page-info { color: var(--text2); font-size: 0.8rem; }
+
+    .log-empty {
+      text-align: center;
+      padding: 30px 20px;
+      color: var(--text2);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>YouTube Downloader</h1>
+    <p class="subtitle">Real-time · WebSocket · Video + Audio</p>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" data-tab="tasks" onclick="switchTab('tasks')">任务</div>
+      <div class="tab" data-tab="logs" onclick="switchTab('logs')">Log</div>
+    </div>
+
+    <!-- Task tab -->
+    <div class="tab-pane active" id="pane-tasks">
+      <div class="status-bar">
+        <div class="dot" id="statusDot"></div>
+        <span id="statusText">连接中...</span>
+      </div>
+
+      <div class="card">
+        <form id="downloadForm">
+          <div class="form-group">
+            <label>YouTube URL</label>
+            <input type="text" id="urlInput"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value="" />
+            <div id="titlePreview"></div>
+          </div>
+
+          <div class="plex-row">
+            <input type="checkbox" id="plexCheck" checked />
+            <label for="plexCheck">Plex Server 兼容</label>
+          </div>
+          <div class="plex-hint">优先使用 H.264/AAC 编码，输出 MP4 格式，方便 Plex 媒体库识别</div>
+
+          <div class="row">
+            <div class="form-group">
+              <label>Format</label>
+              <select id="formatSelect">
+                <option value="video">Video (MP4)</option>
+                <option value="audio">Audio Only (MP3)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quality</label>
+              <select id="qualitySelect">
+                <option value="1080p">1080p</option>
+                <option value="720p">720p</option>
+                <option value="480p">480p</option>
+                <option value="360p">360p</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn" id="submitBtn">开始下载</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <span style="font-size:0.85rem; color:var(--text2);">任务历史</span>
+          <button class="btn btn-clear" id="clearBtn">清除已完成</button>
+        </div>
+        <div id="taskList"></div>
+      </div>
+    </div>
+
+    <!-- Log tab -->
+    <div class="tab-pane" id="pane-logs">
+      <div class="card" id="logCard">
+        <div id="logList"></div>
+        <div class="pagination" id="logPagination"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.IO client (bundled locally) -->
+  <script src="/static/socket.io.min.js"></script>
+  <script>
+    // ---- WebSocket connection ----
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+
+    const socket = io({
+      transports: ["polling", "websocket"],
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+    });
+
+    socket.on("connect", () => {
+      statusDot.className = "dot active";
+      statusText.textContent = "在线 · 实时推送";
+      // Request current task list on connect
+      socket.emit("request_tasks");
+    });
+
+    socket.on("disconnect", () => {
+      statusDot.className = "dot error";
+      statusText.textContent = "断开 · 正在重连...";
+    });
+
+    socket.on("connect_error", () => {
+      statusDot.className = "dot error";
+      statusText.textContent = "连接失败";
+    });
+
+    // ---- Task state ----
+    let tasks = {};
+
+    // ---- Tab switching ----
+    let currentTab = "tasks";
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+      document.querySelector(`.tab[data-tab="${tab}"]`).classList.add("active");
+      document.getElementById(`pane-${tab}`).classList.add("active");
+      if (tab === "logs") loadLogs(1);
+    }
+
+    let titleFetchTimer = null;
+    let logPage = 1;
+
+    // ---- Title preview on URL input ----
+    async function fetchTitle(url) {
+      if (!url || !url.includes("youtube.com") && !url.includes("youtu.be")) {
+        document.getElementById("titlePreview").textContent = "";
+        return;
+      }
+      const el = document.getElementById("titlePreview");
+      el.innerHTML = '<span class="spinner"></span>提取标题...';
+      el.className = "loading";
+      try {
+        const resp = await fetch("/title?url=" + encodeURIComponent(url));
+        const data = await resp.json();
+        if (data.title) {
+          el.textContent = data.title;
+          el.className = "";
+        } else {
+          el.textContent = "无法提取标题";
+          el.className = "error";
+        }
+      } catch (e) {
+        el.textContent = "标题提取失败";
+        el.className = "error";
+      }
+    }
+
+    document.getElementById("urlInput").addEventListener("input", (e) => {
+      clearTimeout(titleFetchTimer);
+      const url = e.target.value.trim();
+      if (!url) {
+        document.getElementById("titlePreview").textContent = "";
+        return;
+      }
+      titleFetchTimer = setTimeout(() => fetchTitle(url), 600);
+    });
+
+    // ---- Task rendering ----
+    function renderTasks() {
+      const list = document.getElementById("taskList");
+      const arr = Object.values(tasks);
+      if (arr.length === 0) {
+        list.innerHTML = '<div class="empty">暂无任务</div>';
+        return;
+      }
+      arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      list.innerHTML = arr.map(t => {
+        const badge = {
+          pending: "等待中",
+          downloading: "下载中",
+          processing: "处理中",
+          completed: "完成",
+          error: "错误",
+        }[t.status] || t.status;
+
+        const cls = {
+          pending: "badge-pending",
+          downloading: "badge-downloading",
+          processing: "badge-processing",
+          completed: "badge-completed",
+          error: "badge-error",
+        }[t.status] || "badge-pending";
+
+        const msg = t.error
+          ? `<span class="task-error">${t.error}</span>`
+          : `<span>${t.message || ""}</span><span>${t.progress !== undefined ? t.progress + "%" : ""}</span>`;
+
+        const filenameHtml = t.filename
+          ? `<div class="task-filename">&#128193; ${t.filename}</div>`
+          : "";
+
+        const urlLabel = t.title
+          ? `<span class="task-url-label">URL</span>
+             <a class="task-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>`
+          : `<span class="task-url-label">URL</span>
+             <a class="task-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>`;
+
+        return `
+          <div class="task">
+            <div class="task-header">
+              <div class="task-title">${t.title || t.url || "未知"}</div>
+              <span class="task-badge ${cls}">${badge}</span>
+            </div>
+            <div class="task-url-row">${urlLabel}</div>
+            ${filenameHtml}
+            <div class="progress-wrap">
+              <div class="progress-bar" style="width:${t.progress || 0}%"></div>
+            </div>
+            <div class="task-message">${msg}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // ---- WebSocket event handlers ----
+    socket.on("task_list", (serverTasks) => {
+      tasks = {};
+      for (const t of serverTasks) {
+        tasks[t.id] = t;
+      }
+      renderTasks();
+    });
+
+    socket.on("task_update", (task) => {
+      tasks[task.id] = task;
+      renderTasks();
+    });
+
+    socket.on("tasks_cleared", () => {
+      // Refresh full list from server
+      socket.emit("request_tasks");
+    });
+
+    // ---- Download form ----
+    document.getElementById("downloadForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const url = document.getElementById("urlInput").value.trim();
+      const format = document.getElementById("formatSelect").value;
+      const quality = document.getElementById("qualitySelect").value;
+      const plex = document.getElementById("plexCheck").checked;
+      if (!url) return;
+
+      const titleEl = document.getElementById("titlePreview");
+      const previewTitle = titleEl.textContent && !titleEl.className.includes("error")
+        ? titleEl.textContent : null;
+
+      document.getElementById("submitBtn").disabled = true;
+      document.getElementById("submitBtn").textContent = "提交中...";
+
+      try {
+        const res = await fetch("/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, format, quality, plex_compatible: plex }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert("错误: " + (data.error || "未知错误"));
+        } else if (data.task && previewTitle) {
+          data.task.title = previewTitle;
+          tasks[data.task.id] = data.task;
+          renderTasks();
+        }
+      } catch (err) {
+        alert("请求失败: " + err.message);
+      } finally {
+        document.getElementById("submitBtn").disabled = false;
+        document.getElementById("submitBtn").textContent = "开始下载";
+      }
+    });
+
+    // ---- Clear completed ----
+    document.getElementById("clearBtn").addEventListener("click", async () => {
+      await fetch("/clear", { method: "POST" });
+    });
+
+    // ---- Log tab ----
+    async function loadLogs(page) {
+      logPage = page;
+      const logList = document.getElementById("logList");
+      const pagination = document.getElementById("logPagination");
+      logList.innerHTML = '<div class="log-empty"><span class="spinner"></span>加载中...</div>';
+
+      try {
+        const res = await fetch(`/logs?page=${page}`);
+        const data = await res.json();
+
+        if (!data.items || data.items.length === 0) {
+          logList.innerHTML = '<div class="log-empty">暂无下载记录</div>';
+          pagination.innerHTML = '';
+          return;
+        }
+
+        logList.innerHTML = data.items.map(item => {
+          const badgeClass = item.format === 'audio' ? 'audio' : 'video';
+          const badgeText = item.format === 'audio' ? 'MP3' : 'MP4';
+          const ext = item.filename ? item.filename.split('.').pop().toUpperCase() : '';
+          return `
+            <div class="log-item">
+              <div class="log-header">
+                <div class="log-title">${item.title || item.url || '未知标题'}</div>
+                <span class="log-badge ${badgeClass}">${badgeText} · ${item.quality}</span>
+              </div>
+              <div class="log-meta">
+                <span>&#128196; 添加: ${item.created_at}</span>
+                <span>&#10004; 完成: ${item.completed_at}</span>
+                <span>&#127916; ${ext || item.format.toUpperCase()}</span>
+              </div>
+              <div class="log-url">${item.url}</div>
+              ${item.filename ? `<div class="log-path">${item.filename}</div>` : ''}
+            </div>
+          `;
+        }).join('');
+
+        // Pagination controls
+        if (data.pages > 1) {
+          pagination.innerHTML = `
+            <button onclick="loadLogs(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>上一页</button>
+            <span class="page-info">第 ${data.page} / ${data.pages} 页 (共 ${data.total} 条)</span>
+            <button onclick="loadLogs(${data.page + 1})" ${data.page >= data.pages ? 'disabled' : ''}>下一页</button>
+          `;
+        } else {
+          pagination.innerHTML = `<span class="page-info">共 ${data.total} 条记录</span>`;
+        }
+      } catch (e) {
+        logList.innerHTML = '<div class="log-empty">加载失败: ' + e.message + '</div>';
+        pagination.innerHTML = '';
+      }
+    }
+  </script>
+</body>
+</html>
