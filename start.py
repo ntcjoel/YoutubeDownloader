@@ -13,6 +13,7 @@ from tasks import task_manager
 import downloader
 import config
 from app_logging import get_logger
+from app_logging.downloads import read_downloads, count_downloads
 
 # Load config
 cfg = config.load_config()
@@ -74,9 +75,33 @@ def clear_completed():
 
 @app.route("/logs")
 def get_logs():
-    """Return paginated download history"""
+    """Return paginated download history from downloads.log"""
     page = int(request.args.get("page", 1))
-    return jsonify(task_manager.get_history(page))
+    limit = int(request.args.get("limit", 20))
+    offset = (page - 1) * limit
+    records = read_downloads(limit=limit, offset=offset)
+    total = count_downloads()
+    pages = max(1, (total + limit - 1) // limit)
+    return jsonify({
+        "items": records,
+        "page": page,
+        "pages": pages,
+        "total": total,
+    })
+
+
+@app.route("/api/app-log")
+def get_app_log():
+    """Return last N lines of app.log"""
+    lines = int(request.args.get("lines", 100))
+    log_dir = config.get_log_dir()
+    log_path = os.path.join(log_dir, "app.log")
+    if not os.path.exists(log_path):
+        return jsonify({"lines": []})
+    with open(log_path, "r", encoding="utf-8") as f:
+        all_lines = f.readlines()
+    tail = all_lines[-lines:]
+    return jsonify({"lines": [l.rstrip("\n") for l in tail]})
 
 
 @app.route("/download", methods=["POST"])
