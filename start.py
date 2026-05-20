@@ -1,9 +1,7 @@
 """
 Flask + Flask-SocketIO web server
-Running at 10.1.1.4:1917
-Using eventlet for true WebSocket push support
+Configurable via config.yaml
 """
-
 import os
 import eventlet
 eventlet.monkey_patch()
@@ -13,6 +11,10 @@ from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 from tasks import task_manager
 import downloader
+import config
+
+# Load config
+cfg = config.load_config()
 
 # Flask app
 app = Flask(__name__,
@@ -64,7 +66,6 @@ def get_title():
 @app.route("/clear", methods=["POST"])
 def clear_completed():
     task_manager.clear_completed()
-    # Broadcast clear event to refresh all clients' task lists
     socketio.emit("tasks_cleared", {})
     return jsonify({"ok": True})
 
@@ -90,7 +91,6 @@ def start_download():
 
     task = task_manager.create_task(url, fmt, quality)
 
-    # Run download in background thread
     t = threading.Thread(
         target=downloader.download_video,
         args=(task.id, url, fmt, quality, plex),
@@ -108,7 +108,6 @@ def start_download():
 @socketio.on("connect")
 def on_connect():
     print(f"[WS] Client connected: {request.sid}")
-    # Push full task list on connect
     emit("task_list", task_manager.get_all_tasks())
 
 
@@ -119,7 +118,6 @@ def on_disconnect():
 
 @socketio.on("request_tasks")
 def on_request_tasks():
-    """Client requests current task list"""
     emit("task_list", task_manager.get_all_tasks())
 
 
@@ -128,11 +126,18 @@ def on_request_tasks():
 # ============================================================
 
 if __name__ == "__main__":
+    host = cfg.get("host", "0.0.0.0")
+    port = cfg.get("port", 1917)
+    video_dir = config.get_video_dir()
+    music_dir = config.get_music_dir()
+    max_video = config.get_max_video_size_gb()
+    max_music = config.get_max_music_size_gb()
+
     print("=" * 50)
     print("YouTube Downloader")
-    print(f"URL: http://10.1.1.4:1917")
-    print(f"Video : ~/youtube-downloader/video/")
-    print(f"Audio : ~/youtube-downloader/music/")
+    print(f"URL: http://{host}:{port}")
+    print(f"Video : {video_dir} (max {max_video} GB)")
+    print(f"Audio : {music_dir} (max {max_music} GB)")
     print("=" * 50)
 
-    socketio.run(app, host="10.1.1.4", port=1917, debug=False)
+    socketio.run(app, host=host, port=port, debug=False)

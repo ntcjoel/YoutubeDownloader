@@ -1,21 +1,73 @@
 """
 Download core module using yt-dlp with progress callbacks
 """
-
 import os
 import re
+import glob
 import yt_dlp
 from tasks import task_manager, TaskStatus
+import config
 
-# Project base directory
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-VIDEO_DIR = os.path.join(BASE_DIR, "video")
-MUSIC_DIR = os.path.join(BASE_DIR, "music")
 
-os.makedirs(VIDEO_DIR, exist_ok=True)
-os.makedirs(MUSIC_DIR, exist_ok=True)
+def _dir_size(path: str) -> float:
+    """Return total size of directory in GB"""
+    if not os.path.exists(path):
+        return 0.0
+    total = sum(
+        os.path.getsize(f) for f in glob.glob(os.path.join(path, "*"))
+        if os.path.isfile(f)
+    )
+    return total / (1024 ** 3)
 
-# broadcaster injected by app.py
+
+def _list_completed_files(dir_path: str) -> list[tuple[str, float]]:
+    """Return list of (filepath, mtime) for all mp4/mp3 files in dir, oldest first"""
+    files = []
+    for ext in ("*.mp4", "*.mp3", "*.webm"):
+        for f in glob.glob(os.path.join(dir_path, ext)):
+            if os.path.isfile(f):
+                files.append((f, os.path.getmtime(f)))
+    files.sort(key=lambda x: x[1])
+    return files
+
+
+def _cleanup_if_needed(dir_path: str, max_size_gb: float, needed_gb: float = 1.0) -> bool:
+    """
+    Remove oldest completed files until dir is under max_size_gb.
+    Returns True if space was freed (or already ok), False if cannot free enough.
+    """
+    policy = config.get_cleanup_policy()
+    max_bytes = max_size_gb * (1024 ** 3)
+
+    while True:
+        current_size = _dir_size(dir_path)
+        if current_size + needed_gb * (1024 ** 3) <= max_bytes:
+            return True  # enough space
+
+        if policy == "skip":
+            return False  # reject download
+
+        # oldest_first: delete oldest files
+        files = _list_completed_files(dir_path)
+        if not files:
+            return False  # no files to delete
+
+        oldest_file, _ = files[0]
+        try:
+            size = os.path.getsize(oldest_file)
+            os.remove(oldest_file)
+            print(f"[cleanup] Removed {oldest_file} ({size / 1024**2:.1f} MB)")
+        except OSError as e:
+            print(f"[cleanup] Failed to remove {oldest_file}: {e}")
+            return False
+
+
+def _ensure_dirs():
+    os.makedirs(config.get_video_dir(), exist_ok=True)
+    os.makedirs(config.get_music_dir(), exist_ok=True)
+
+
+# broadcaster injected by start.py
 _broadcast_fn = None
 
 def set_broadcast_fn(fn):
@@ -95,6 +147,8 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
     if not task:
         return
 
+    _ensure_dirs()
+
     task.update(status=TaskStatus.DOWNLOADING, progress=0, message="Initializing...")
 
     # Clean URL
@@ -106,10 +160,13 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
     _emit_update(task_id)
     safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
 
-    outtmpl_video = os.path.join(VIDEO_DIR, f"{safe_title}.%(ext)s")
-    outtmpl_audio = os.path.join(MUSIC_DIR, f"{safe_title}.%(ext)s")
+    outtmpl_video = os.path.join(config.get_video_dir(), f"{safe_title}.%(ext)s")
+    outtmpl_audio = os.path.join(config.get_music_dir(), f"{safe_title}.%(ext)s")
 
     if format == "audio":
+        target_dir = config.get_music_dir()
+        max_size_gb = config.get_max_music_size_gb()
+        out_path = os.path.join(target_dir, f"{safe_title}.mp3")
         ydl_opts = {
             "format": "bestaudio/best",
             "outtmpl": outtmpl_audio,
@@ -123,9 +180,10 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
             }],
             "merge_output_format": "mp3",
         }
-        out_path = os.path.join(MUSIC_DIR, f"{safe_title}.mp3")
         download_url = clean_url
     else:
+        target_dir = config.get_video_dir()
+        max_size_gb = config.get_max_video_size_gb()
         max_height = quality.replace("p", "")
         if plex_compatible:
             # Plex compatible: prefer H.264 + AAC, merge to MP4
@@ -148,8 +206,20 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
             "merge_output_format": "mp4",
             "progress_hooks": [make_progress_hook(task_id)],
         }
-        out_path = os.path.join(VIDEO_DIR, f"{safe_title}.mp4")
+        out_path = os.path.join(target_dir, f"{safe_title}.mp4")
         download_url = clean_url
+
+    # Check / free disk space before downloading
+    if max_size_gb > 0:
+        if not _cleanup_if_needed(target_dir, max_size_gb):
+            task.update(
+                status=TaskStatus.ERROR,
+                progress=0,
+                message="Disk limit reached, no files to free",
+                error="Disk limit exceeded"
+            )
+            _emit_update(task_id)
+            return
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

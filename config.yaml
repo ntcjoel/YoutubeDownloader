@@ -1,0 +1,27 @@
+# YouTube Downloader Configuration
+
+# Server binding
+host: "0.0.0.0"
+port: 1917
+
+# Directory paths (absolute or relative to project root)
+video_dir: "video"
+music_dir: "music"
+
+# Disk usage limits (in GB, 0 = no limit)
+max_video_size_gb: 50
+max_music_size_gb: 10
+
+# Cleanup policy when limit is exceeded
+#   oldest_first  - delete oldest completed files until under limit
+#   skip          - reject new downloads when at limit
+cleanup_policy: "oldest_first"
+
+# Download defaults
+default_quality: "1080p"
+default_format: "video"
+plex_compatible: true
+
+# Download history
+#   retention_days: how many days to keep history records (0 = forever)
+retention_days: 30

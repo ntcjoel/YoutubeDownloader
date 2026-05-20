@@ -1,0 +1,118 @@
+"""
+Configuration loader - reads config.yaml and supports env var overrides.
+Environment variables take precedence over config.yaml values.
+"""
+import os
+import yaml
+from pathlib import Path
+
+_CONFIG = None
+
+def _get_config_path() -> str:
+    """Find config.yaml relative to this file or project root"""
+    base = Path(__file__).parent.resolve()
+    p = base / "config.yaml"
+    if p.exists():
+        return str(p)
+    return "config.yaml"
+
+
+def load_config() -> dict:
+    global _CONFIG
+    if _CONFIG is not None:
+        return _CONFIG
+
+    path = _get_config_path()
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            raw = yaml.safe_load(f)
+    else:
+        raw = {}
+
+    _CONFIG = _get_defaults()
+    if raw:
+        _CONFIG.update(raw)
+
+    # Env var overrides (these always win)
+    env_overrides = {
+        "host":          os.environ.get("HOST"),
+        "port":          _env_int("PORT"),
+        "video_dir":     os.environ.get("VIDEO_DIR"),
+        "music_dir":     os.environ.get("MUSIC_DIR"),
+        "max_video_size_gb": _env_float("MAX_VIDEO_SIZE_GB"),
+        "max_music_size_gb": _env_float("MAX_MUSIC_SIZE_GB"),
+        "cleanup_policy": os.environ.get("CLEANUP_POLICY"),
+        "default_quality": os.environ.get("DEFAULT_QUALITY"),
+        "default_format":  os.environ.get("DEFAULT_FORMAT"),
+        "plex_compatible": _env_bool("PLEX_COMPATIBLE"),
+        "retention_days":  _env_int("RETENTION_DAYS"),
+    }
+    for key, val in env_overrides.items():
+        if val is not None and val != "":
+            _CONFIG[key] = val
+
+    # Resolve relative paths relative to config file location
+    config_dir = Path(path).parent.resolve()
+    for key in ("video_dir", "music_dir"):
+        val = _CONFIG.get(key, "")
+        if val and not os.path.isabs(val):
+            _CONFIG[key] = str(config_dir / val)
+
+    return _CONFIG
+
+
+def _get_defaults() -> dict:
+    base = Path(__file__).parent.resolve()
+    return {
+        "host": "0.0.0.0",
+        "port": 1917,
+        "video_dir": str(base / "video"),
+        "music_dir": str(base / "music"),
+        "max_video_size_gb": 50,
+        "max_music_size_gb": 10,
+        "cleanup_policy": "oldest_first",
+        "default_quality": "1080p",
+        "default_format": "video",
+        "plex_compatible": True,
+        "retention_days": 30,
+    }
+
+
+def _env_int(key: str) -> int | None:
+    val = os.environ.get(key)
+    return int(val) if val is not None and val.isdigit() else None
+
+
+def _env_float(key: str) -> float | None:
+    val = os.environ.get(key)
+    try:
+        return float(val) if val else None
+    except ValueError:
+        return None
+
+
+def _env_bool(key: str) -> bool | None:
+    val = os.environ.get(key)
+    if val is None:
+        return None
+    return val.lower() in ("true", "1", "yes")
+
+
+def get(key: str, default=None):
+    return load_config().get(key, default)
+
+
+def get_video_dir() -> str:
+    return get("video_dir")
+
+def get_music_dir() -> str:
+    return get("music_dir")
+
+def get_max_video_size_gb() -> float:
+    return float(get("max_video_size_gb", 50))
+
+def get_max_music_size_gb() -> float:
+    return float(get("max_music_size_gb", 10))
+
+def get_cleanup_policy() -> str:
+    return get("cleanup_policy", "oldest_first")
