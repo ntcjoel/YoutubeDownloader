@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, make_response
 from flask_socketio import SocketIO, emit
 from tasks import task_manager
 import downloader
@@ -324,6 +324,73 @@ def remove_tasks():
     for task_id in ids:
         task_manager.remove_task(task_id)
     return jsonify({"ok": True, "removed": len(ids)})
+
+
+@app.route("/api/download", methods=["POST"])
+def api_download():
+    """
+    Public download API for external callers (Chrome extension, scripts, etc.).
+    Body: { url, format ("video"|"audio"), quality ("720p"|"1080p"|...), category (optional) }
+    Returns: { ok, task_id, task }
+
+    CORS-enabled for cross-origin calls (e.g. Chrome extension).
+    """
+    # Handle preflight OPTIONS request
+    if request.method == "OPTIONS":
+        resp = make_response("", 204)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return resp
+
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+
+    url = (data.get("url") or "").strip()
+    fmt = (data.get("format") or "video").strip().lower()
+    quality = (data.get("quality") or "1080p").strip()
+    category = (data.get("category") or "").strip() or None
+
+    if not url:
+        return _cors_json({"error": "url is required"}, 400)
+    if fmt not in ("video", "audio"):
+        return _cors_json({"error": "format must be 'video' or 'audio'"}), 400
+
+    # Validate quality format (e.g. "720p", "1080p", "480p")
+    import re
+    if not re.match(r"^\d+p$", quality):
+        return _cors_json({"error": f"invalid quality format: {quality} (use e.g. '720p', '1080p')"}), 400
+
+    # Validate category if provided
+    if category:
+        cats = config.get_categories()
+        if category not in cats:
+            return _cors_json({"error": f"unknown category: {category}"}), 400
+
+    cfg = config.load_config()
+    strip_playlist = cfg.get("strip_playlist", False)
+
+    task = task_manager.create_task(url, fmt, quality, category=category)
+
+    t = threading.Thread(
+        target=downloader.download_video,
+        args=(task.id, url, fmt, quality, "", strip_playlist, category),
+        daemon=True
+    )
+    t.start()
+
+    log.info("API download started: task=%s url=%s format=%s quality=%s category=%s",
+             task.id, url, fmt, quality, category)
+    return _cors_json({"ok": True, "task_id": task.id, "task": task.to_dict()})
+
+
+def _cors_json(data, status=200):
+    """Wrap jsonify response with CORS headers."""
+    resp = jsonify(data)
+    resp.status_code = status
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @app.route("/api/tasks/redownload", methods=["POST"])

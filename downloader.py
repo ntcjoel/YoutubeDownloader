@@ -139,6 +139,9 @@ def get_video_info(url: str) -> dict:
         "extract_flat": False,
         "socket_timeout": 10,
     }
+    # Use cookie if configured (e.g. Bilibili age-gate content needs auth)
+    if config.get_cookie_file():
+        ydl_opts["cookiefile"] = config.get_cookie_file()
 
     # Strip playlist params so we always query single video info
     parsed = urlparse(url)
