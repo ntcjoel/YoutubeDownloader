@@ -118,8 +118,11 @@ function populateQualityDropdown(qualities) {
   const defaultQualities = ["2160p", "1440p", "1080p", "720p", "480p", "360p"];
   const allQualities = qualities.length > 0 ? qualities : defaultQualities;
   select.innerHTML = allQualities.map(q => `<option value="${q}">${q}</option>`).join("");
-  // Auto-select the highest available quality
-  if (allQualities.length > 0) {
+  // Auto-select the configured default quality, fall back to highest available
+  const defaultQuality = document.getElementById("setDefaultQuality")?.value || "1080p";
+  if (allQualities.includes(defaultQuality)) {
+    select.value = defaultQuality;
+  } else if (allQualities.length > 0) {
     select.value = allQualities[0];
   }
 }
