@@ -8,3 +8,8 @@ logs/
 .DS_Store
 tasks_state.json
 tasks_state.json.lock
+youtube.txt
+bilibili.txt
+tiktok.txt
+*.txt
+README.txt

@@ -33,6 +33,15 @@ def load_config() -> dict:
     if raw:
         _CONFIG.update(raw)
 
+    # Migrate legacy cookie_file -> cookie_site + cookie_custom_path
+    if raw.get("cookie_file") and not raw.get("cookie_site"):
+        old_path = raw["cookie_file"]
+        if old_path:
+            _CONFIG["cookie_site"] = "custom"
+            _CONFIG["cookie_custom_path"] = old_path
+        # Remove legacy key so it doesn't persist
+        _CONFIG.pop("cookie_file", None)
+
     # Env var overrides — only apply when explicitly set in environment
     env_overrides = {
         "host":          os.environ.get("HOST"),
@@ -131,8 +140,33 @@ def get_cleanup_policy() -> str:
 def get_disk_limit_enabled() -> bool:
     return bool(get("disk_limit_enabled", False))
 
+def get_cookie_site() -> str:
+    """Which site to use cookies for: '', 'youtube', 'bilibili', 'tiktok', 'custom'."""
+    return get("cookie_site", "")
+
+def get_cookie_custom_path() -> str:
+    """Custom cookie file path when site='custom'."""
+    return get("cookie_custom_path", "")
+
+# Map site key -> expected cookie file path inside the container
+_SITE_COOKIE_PATHS = {
+    "youtube":   "/app/cookies/youtube.txt",
+    "bilibili":  "/app/cookies/bilibili.txt",
+    "tiktok":    "/app/cookies/tiktok.txt",
+}
+
 def get_cookie_file() -> str:
-    return get("cookie_file", "")
+    """
+    Resolve the actual cookie file path based on the selected site.
+    Returns empty string if no site is selected or file does not exist.
+    """
+    site = get_cookie_site()
+    if not site or site == "none":
+        return ""
+    if site == "custom":
+        path = get_cookie_custom_path()
+        return path if path else ""
+    return _SITE_COOKIE_PATHS.get(site, "")
 
 
 

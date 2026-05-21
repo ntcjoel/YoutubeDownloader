@@ -224,7 +224,7 @@ def update_config():
         "video_dir", "music_dir", "disk_limit_enabled",
         "max_video_size_gb", "max_music_size_gb",
         "cleanup_policy", "default_quality", "default_format",
-        "retention_days", "strip_playlist", "cookie_file",
+        "retention_days", "strip_playlist", "cookie_site", "cookie_custom_path",
     }
     filtered = {k: v for k, v in data.items() if k in allowed}
     if not filtered:

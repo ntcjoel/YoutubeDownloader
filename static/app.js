@@ -534,6 +534,11 @@ async function saveCategories() {
   }
 }
 
+function onCookieSiteChange() {
+  const site = document.getElementById('setCookieSite').value;
+  document.getElementById('cookieCustomRow').style.display = site === 'custom' ? 'flex' : 'none';
+}
+
 function populateServerConfig(cfg) {
   if (!cfg) return;
   document.getElementById('setVideoDir').value = cfg.video_dir || '';
@@ -546,7 +551,10 @@ function populateServerConfig(cfg) {
   document.getElementById('setStripPlaylist').checked = !!cfg.strip_playlist;
   document.getElementById('setCleanupPolicy').value = cfg.cleanup_policy || 'oldest_first';
   document.getElementById('setRetentionDays').value = cfg.retention_days ?? '';
-  document.getElementById('setCookieFile').value = cfg.cookie_file || '';
+  document.getElementById('setCookieSite').value = cfg.cookie_site || '';
+  const showCustom = cfg.cookie_site === 'custom';
+  document.getElementById('cookieCustomRow').style.display = showCustom ? 'flex' : 'none';
+  document.getElementById('setCookieCustomPath').value = cfg.cookie_custom_path || '';
 }
 
 function loadUIPrefsFromStorage() {
@@ -596,7 +604,8 @@ async function saveServerConfig() {
       strip_playlist: document.getElementById('setStripPlaylist').checked,
       cleanup_policy: document.getElementById('setCleanupPolicy').value,
       retention_days: parseInt(document.getElementById('setRetentionDays').value) || 0,
-      cookie_file: document.getElementById('setCookieFile').value.trim(),
+      cookie_site: document.getElementById('setCookieSite').value,
+      cookie_custom_path: document.getElementById('setCookieCustomPath').value.trim(),
     };
     const res = await fetch('/api/config', {
       method: 'POST',

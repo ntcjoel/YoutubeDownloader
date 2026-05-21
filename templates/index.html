@@ -984,9 +984,19 @@
           </div>
 
           <div class="settings-row">
-            <label class="settings-label">Cookie File</label>
-            <input type="text" class="settings-input" id="setCookieFile" placeholder="/app/cookies.txt" style="min-width:280px;" />
-            <span class="settings-hint">Path to Netscape cookies.txt for sites requiring login (B站会员, YouTube age-gate, etc.)</span>
+            <label class="settings-label">Cookie Site</label>
+            <select class="settings-input" id="setCookieSite" style="min-width:200px;" onchange="onCookieSiteChange()">
+              <option value="">None</option>
+              <option value="youtube">YouTube</option>
+              <option value="bilibili">Bilibili</option>
+              <option value="tiktok">TikTok</option>
+              <option value="custom">Custom Path</option>
+            </select>
+            <span class="settings-hint">Attach cookies for sites requiring login (age-gate, members-only content)</span>
+          </div>
+          <div class="settings-row" id="cookieCustomRow" style="display:none;">
+            <label class="settings-label">Custom Cookie Path</label>
+            <input type="text" class="settings-input" id="setCookieCustomPath" placeholder="/app/cookies/mine.txt" style="min-width:280px;" />
           </div>
 
           <div class="settings-actions">
