@@ -88,7 +88,7 @@ let _historyPageSize = 20;
 
 // ---- Title preview on URL input ----
 async function fetchTitle(url) {
-  if (!url || !url.includes("youtube.com") && !url.includes("youtu.be")) {
+  if (!url || !url.includes("youtube.com") && !url.includes("youtu.be") && !url.includes("bilibili.com") && !url.includes("tiktok.com")) {
     document.getElementById("titlePreview").textContent = "";
     return;
   }
