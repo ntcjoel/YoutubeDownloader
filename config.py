@@ -207,3 +207,35 @@ def get_categories() -> dict:
 def save_categories(categories: dict) -> None:
     """Save full categories dict to config.yaml."""
     save_config({"categories": categories})
+
+def _get_cookie_file_for_site(site: str, custom_path: str = "") -> str:
+    """Resolve cookie file path given a site key (used during save)."""
+    if not site or site == "none":
+        return ""
+    if site == "custom":
+        return custom_path if custom_path else ""
+    return _SITE_COOKIE_PATHS.get(site, "")
+
+
+def save_cookie_file(site: str, content: str) -> bool:
+    """
+    Write cookie content to the appropriate cookie file.
+    Returns True on success, False on failure.
+    """
+    if not site or site == "none":
+        return False
+    path = _get_cookie_file_for_site(site, get_cookie_custom_path())
+    if not path:
+        return False
+    try:
+        # Ensure parent dir exists
+        parent = os.path.dirname(path)
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        log.info("Saved cookie file: %s", path)
+        return True
+    except Exception as e:
+        log.error("Failed to save cookie file %s: %s", path, e)
+        return False

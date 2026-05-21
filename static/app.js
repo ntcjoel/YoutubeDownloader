@@ -542,6 +542,18 @@ async function saveCategories() {
 function onCookieSiteChange() {
   const site = document.getElementById('setCookieSite').value;
   document.getElementById('cookieCustomRow').style.display = site === 'custom' ? 'flex' : 'none';
+  const cookieRow = document.getElementById('cookieContentRow');
+  const cookieContent = document.getElementById('setCookieContent');
+  if (site && site !== '') {
+    cookieRow.style.display = 'flex';
+    // Fetch and display truncated cookie content
+    fetch('/api/cookie?site=' + encodeURIComponent(site))
+      .then(r => r.json())
+      .then(d => { cookieContent.value = d.content || ''; });
+  } else {
+    cookieRow.style.display = 'none';
+    cookieContent.value = '';
+  }
 }
 
 function populateServerConfig(cfg) {
@@ -557,9 +569,21 @@ function populateServerConfig(cfg) {
   document.getElementById('setCleanupPolicy').value = cfg.cleanup_policy || 'oldest_first';
   document.getElementById('setRetentionDays').value = cfg.retention_days ?? '';
   document.getElementById('setCookieSite').value = cfg.cookie_site || '';
-  const showCustom = cfg.cookie_site === 'custom';
-  document.getElementById('cookieCustomRow').style.display = showCustom ? 'flex' : 'none';
+  document.getElementById('cookieCustomRow').style.display = cfg.cookie_site === 'custom' ? 'flex' : 'none';
   document.getElementById('setCookieCustomPath').value = cfg.cookie_custom_path || '';
+  // Show cookie content row and load content for selected site
+  const site = cfg.cookie_site || '';
+  const cookieRow = document.getElementById('cookieContentRow');
+  const cookieContent = document.getElementById('setCookieContent');
+  if (site) {
+    cookieRow.style.display = 'flex';
+    fetch('/api/cookie?site=' + encodeURIComponent(site))
+      .then(r => r.json())
+      .then(d => { cookieContent.value = d.content || ''; });
+  } else {
+    cookieRow.style.display = 'none';
+    cookieContent.value = '';
+  }
 }
 
 function loadUIPrefsFromStorage() {
@@ -620,6 +644,16 @@ async function saveServerConfig() {
     const data = await res.json();
     if (data.ok) {
       _serverConfig = data.config;
+      // Also save cookie content to file
+      const cookieSite = document.getElementById('setCookieSite').value;
+      const cookieVal = document.getElementById('setCookieContent').value;
+      if (cookieSite) {
+        await fetch('/api/cookie', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ site: cookieSite, content: cookieVal }),
+        });
+      }
       showSavedMsg('serverSavedMsg');
     } else {
       errEl.textContent = 'Error: ' + (data.error || 'Unknown error');

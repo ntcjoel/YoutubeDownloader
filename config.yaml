@@ -5,6 +5,9 @@ categories:
     max_size_gb: 0
     name: Music
 cleanup_policy: oldest_first
+cookie_content: ''
+cookie_custom_path: ''
+cookie_site: ''
 default_format: video
 default_quality: 1080p
 disk_limit_enabled: false
@@ -17,5 +20,3 @@ port: 1917
 retention_days: 0
 strip_playlist: true
 video_dir: /app/video
-cookie_site: ""
-cookie_custom_path: ""

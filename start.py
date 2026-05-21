@@ -247,6 +247,44 @@ def update_config():
     return jsonify({"ok": True, "config": cfg})
 
 
+@app.route("/api/cookie")
+def get_cookie():
+    """Return truncated cookie content for the given site."""
+    site = request.args.get("site", "")
+    if not site or site == "none":
+        return jsonify({"content": ""})
+    path = config._get_cookie_file_for_site(site, config.get_cookie_custom_path())
+    if not path:
+        return jsonify({"content": ""})
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Truncate to 200 chars for display
+        truncated = content[:200] + ("..." if len(content) > 200 else "")
+        return jsonify({"content": truncated, "full": len(content)})
+    except FileNotFoundError:
+        return jsonify({"content": "", "full": 0})
+    except Exception as e:
+        log.error("Failed to read cookie file: %s", e)
+        return jsonify({"content": ""}), 500
+
+
+@app.route("/api/cookie", methods=["POST"])
+def save_cookie():
+    """Save cookie content for the given site."""
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+    site = data.get("site", "")
+    content = data.get("content", "")
+    if not site or site == "none":
+        return jsonify({"error": "No site specified"}), 400
+    ok = config.save_cookie_file(site, content)
+    if not ok:
+        return jsonify({"error": "Failed to save cookie file"}), 500
+    return jsonify({"ok": True})
+
+
 @app.route("/api/categories")
 def get_categories():
     """Return current category definitions."""
