@@ -541,7 +541,6 @@ async function saveCategories() {
 
 function onCookieSiteChange() {
   const site = document.getElementById('setCookieSite').value;
-  document.getElementById('cookieCustomRow').style.display = site === 'custom' ? 'flex' : 'none';
   const cookieRow = document.getElementById('cookieContentRow');
   const cookieContent = document.getElementById('setCookieContent');
   if (site && site !== '') {
