@@ -1,18 +1,23 @@
 # YouTube Downloader
 
-Self-hosted YouTube video/audio downloader with real-time WebSocket progress, automatic disk cleanup, and Docker support.
+Self-hosted YouTube video/audio downloader with real-time WebSocket progress, task persistence, automatic disk cleanup, and Docker support.
 
 ---
 
 ## Features
 
-- **Real-time WebSocket push** — task progress and status updates pushed to the browser instantly (no polling)
-- **YouTube title preview** — fetches video title before downloading
-- **Download history** — paginated log of completed downloads
+- **Real-time WebSocket push** — task progress and status updates pushed to the browser instantly via Flask-SocketIO
+- **YouTube title + quality preview** — fetches available quality options before downloading
+- **Playlist support** — strips `list=`/`index=` params, processes playlist URLs correctly
+- **Task persistence** — tasks survive server restarts; interrupted tasks recovered as `error` with one-click redownload
+- **yt-dlp auto-update** — background thread checks and updates yt-dlp on every server startup
+- **MP3 metadata embedding** — embeds thumbnail (album art), title, and metadata into downloaded MP3s
+- **Download history** — paginated log with per-item menu: Delete record / Delete file
+- **Dynamic quality selector** — quality dropdown populated based on actual available formats
+- **Categories** — create/manage download categories (video/music) via Settings UI
+- **Theme** — dark (GitHub black) and light (warm cream) modes; auto-detects by time (6:00–18:00 light), manual toggle in status bar
 - **Disk management** — automatic cleanup when video/music directories exceed configured size limits
-- **Configurable via YAML** — all settings in `config.yaml`, overridable with environment variables
-- **Docker-ready** — `Dockerfile` included for containerized deployment
-- **yt-dlp auto-update** — `update.sh` script for scheduled yt-dlp updates via cron
+- **Docker-ready** — `Dockerfile` + `docker-compose.yml` for containerized deployment
 
 ---
 
@@ -21,12 +26,15 @@ Self-hosted YouTube video/audio downloader with real-time WebSocket progress, au
 ```
 start.py          Flask + Flask-SocketIO server (entry point)
 downloader.py     yt-dlp wrapper, disk check + cleanup logic
-tasks.py          In-memory task state manager
-app.py            Legacy polling-mode server (reference)
-config.yaml       All settings (paths, limits, defaults)
+tasks.py          Task state manager with JSON persistence (tasks_state.json)
+config.yaml       All settings (paths, limits, categories, defaults)
 config.py         YAML loader with env var overrides
 templates/
-  index.html      Web UI (Socket.IO client, real-time task cards)
+  index.html      Web UI (Socket.IO client, real-time task cards, theme system)
+static/
+  app.js          Frontend logic (WebSocket events, theme, menus)
+app_logging/
+  downloads.py    Logging utility
 ```
 
 **WebSocket events** (server → client):
@@ -38,24 +46,43 @@ templates/
 
 ## Quick Start
 
+### Docker (recommended)
+
+```bash
+git clone https://github.com/ntcjoel/YoutubeDownloader.git
+cd YoutubeDownloader
+
+# Edit config.yaml to set your video/music directories
+vim config.yaml
+
+# Build and start
+docker compose up -d --build
+
+# View logs
+docker compose logs -f
+```
+
+Access at `http://<your-server>:1917`
+
 ### Bare Metal
 
 ```bash
 git clone https://github.com/ntcjoel/YoutubeDownloader.git
 cd YoutubeDownloader
-./setup.sh          # creates venv, installs deps, creates dirs
-python start.py     # runs at http://0.0.0.0:1917
-```
 
-### Docker
+# Install system deps
+sudo apt install ffmpeg python3-venv
 
-```bash
-docker build -t ytdl .
-docker run -d -p 1917:1917 \
-  -v $(pwd)/video:/downloads/video \
-  -v $(pwd)/music:/downloads/music \
-  -e MAX_VIDEO_SIZE_GB=100 \
-  ytdl
+# Create venv and install
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Edit config.yaml
+vim config.yaml
+
+# Start
+python start.py
 ```
 
 ---
@@ -69,13 +96,13 @@ All settings live in `config.yaml`:
 host: "0.0.0.0"
 port: 1917
 
-# Directory paths (relative to project root or absolute)
-video_dir: "video"
-music_dir: "music"
+# Directory paths (absolute paths recommended)
+video_dir: "/mnt/nfs/pt/ytb_video"
+music_dir: "/mnt/nfs/pt/ytb_music"
 
 # Disk usage limits in GB (0 = no limit)
-max_video_size_gb: 50
-max_music_size_gb: 10
+max_video_size_gb: 0
+max_music_size_gb: 0
 
 # Cleanup policy when limit is exceeded
 #   oldest_first  - delete oldest completed files until under limit
@@ -85,15 +112,21 @@ cleanup_policy: "oldest_first"
 # Download defaults
 default_quality: "1080p"
 default_format: "video"
-plex_compatible: true
+
+# Categories (manageable via Settings UI)
+categories:
+  - name: "video"
+    quality: "1080p"
+    format: "video"
+  - name: "music"
+    quality: "bestaudio"
+    format: "audio"
 
 # History retention in days (0 = forever)
 retention_days: 30
 ```
 
 ### Environment Variable Overrides
-
-Any config key can be overridden at runtime:
 
 | Config Key | Env Variable |
 |---|---|
@@ -105,46 +138,22 @@ Any config key can be overridden at runtime:
 | `max_music_size_gb` | `MAX_MUSIC_SIZE_GB` |
 | `cleanup_policy` | `CLEANUP_POLICY` |
 
-Example:
-```bash
-MAX_VIDEO_SIZE_GB=200 PORT=8080 python start.py
-```
-
----
-
-## Keeping yt-dlp Updated
-
-YouTube frequently changes its API. Run `update.sh` periodically to stay current:
-
-```bash
-./update.sh
-```
-
-**Automated (cron)** — every Sunday at 3 AM:
-```bash
-crontab -e
-# add line:
-0 3 * * 0 /path/to/update.sh
-```
-
 ---
 
 ## Project Files
 
 | File | Purpose |
 |---|---|
-| `start.py` | Server entry point (Flask + Flask-SocketIO) |
-| `downloader.py` | yt-dlp downloader + disk cleanup |
-| `tasks.py` | In-memory task state manager |
-| `app.py` | Legacy polling-mode server (not used) |
+| `start.py` | Server entry point (Flask + Flask-SocketIO), all API routes |
+| `downloader.py` | yt-dlp downloader + disk cleanup + task_manager integration |
+| `tasks.py` | Task state manager with JSON file persistence (`tasks_state.json`) |
 | `config.yaml` | User-editable configuration |
 | `config.py` | YAML config loader + env overrides |
 | `requirements.txt` | Pinned Python dependencies |
-| `setup.sh` | One-click setup for new machines |
-| `update.sh` | yt-dlp update script |
-| `Dockerfile` | Containerized deployment |
-| `.env.example` | Environment variable template |
-| `templates/index.html` | Web UI |
+| `Dockerfile` | Container build definition |
+| `docker-compose.yml` | Container orchestration (volumes, ports, restart policy) |
+| `templates/index.html` | Web UI (Socket.IO v4 client, theme CSS, download form) |
+| `static/app.js` | Frontend WebSocket logic, theme, menus |
 
 ---
 
@@ -152,9 +161,9 @@ crontab -e
 
 - **Flask-SocketIO** — WebSocket server with eventlet
 - **yt-dlp** — YouTube downloader backend
-- **ffmpeg** — media processing
-- **Socket.IO** — real-time browser client (bundled locally, no CDN)
-- **Python 3.12+**
+- **ffmpeg** — media processing and metadata embedding
+- **Socket.IO v4** — real-time browser client (bundled locally, no CDN dependency)
+- **Python 3.11+**
 
 ---
 
