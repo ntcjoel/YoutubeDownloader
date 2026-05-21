@@ -33,7 +33,7 @@ def load_config() -> dict:
     if raw:
         _CONFIG.update(raw)
 
-    # Env var overrides (these always win)
+    # Env var overrides — only apply when explicitly set in environment
     env_overrides = {
         "host":          os.environ.get("HOST"),
         "port":          _env_int("PORT"),
@@ -46,12 +46,16 @@ def load_config() -> dict:
         "cleanup_policy": os.environ.get("CLEANUP_POLICY"),
         "default_quality": os.environ.get("DEFAULT_QUALITY"),
         "default_format":  os.environ.get("DEFAULT_FORMAT"),
-        "plex_compatible": _env_bool("PLEX_COMPATIBLE"),
         "retention_days":  _env_int("RETENTION_DAYS"),
     }
     for key, val in env_overrides.items():
         if val is not None and val != "":
-            _CONFIG[key] = val
+            if isinstance(val, bool):
+                _CONFIG[key] = val
+            elif val.lower() in ("true", "false"):
+                _CONFIG[key] = val.lower() == "true"
+            else:
+                _CONFIG[key] = val
 
     # Resolve relative paths relative to config file location
     config_dir = Path(path).parent.resolve()
@@ -77,7 +81,6 @@ def _get_defaults() -> dict:
         "cleanup_policy": "oldest_first",
         "default_quality": "1080p",
         "default_format": "video",
-        "plex_compatible": True,
         "retention_days": 30,
         "strip_playlist": False,
     }

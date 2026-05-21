@@ -290,13 +290,12 @@ def _get_target_dir(format: str, category: str = None) -> tuple[str, float]:
         return config.get_video_dir(), config.get_max_video_size_gb()
 
 
-def download_video(task_id: str, url: str, format: str, quality: str, plex_compatible: bool = True, custom_name: str = "", strip_playlist: bool = False, category: str = None):
+def download_video(task_id: str, url: str, format: str, quality: str, custom_name: str = "", strip_playlist: bool = False, category: str = None):
     """
     Execute download task
     format: "video" -> merged mp4 saved to video/
            "audio" -> mp3 saved to music/
     category: optional category name to route to a custom directory
-    plex_compatible: True prefers H.264/AAC MP4 output (avoids AV1/WebM)
     """
     task = task_manager.get_task(task_id)
     if not task:
@@ -361,17 +360,7 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
     else:
         out_path = os.path.join(target_dir, f"{safe_name}.mp4")
         max_height = quality.replace("p", "")
-        if plex_compatible:
-            # Plex compatible: prefer H.264 + AAC, merge to MP4
-            # YouTube 1080p usually has no standalone H.264 stream,
-            # falls back to bestvideo+bestaudio then remux to MP4
-            video_format = (
-                f"bestvideo[height<={max_height}][vcodec=h264]+bestaudio[acodec=mp4a]/"
-                f"bestvideo[height<={max_height}][vcodec=h264]+bestaudio[acodec=aac]/"
-                f"bestvideo[height<={max_height}]+bestaudio"
-            )
-        else:
-            video_format = f"bestvideo[height<={max_height}]+bestaudio/best"
+        video_format = f"bestvideo[height<={max_height}]+bestaudio/best"
 
         ydl_opts = {
             "format": video_format,
@@ -428,6 +417,7 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
             filename=out_path
         )
         task_manager.record_completed(task_id)
+        task_manager.save_tasks()
         log.info("Task %s completed: %s -> %s (%.1f MB)", task_id, title, out_path, size_mb)
         log_download(
             url=url, title=title, filename=out_path,
@@ -451,4 +441,5 @@ def download_video(task_id: str, url: str, format: str, quality: str, plex_compa
             message="Download failed",
             error=str(e)
         )
+        task_manager.save_tasks()
     _emit_update(task_id)

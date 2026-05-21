@@ -10,10 +10,8 @@ const socket = io({
 
 socket && socket.on("connect", () => {
   statusDot.className = "dot active";
-  statusText.textContent = "Online · Real-time";
-  // Request current task list on connect
+  statusText.textContent = "";
   socket.emit("request_tasks");
-  // Apply default tab from localStorage prefs
   const savedPrefs = JSON.parse(localStorage.getItem('ydl_ui_prefs') || '{}');
   const defaultTab = savedPrefs.defaultTab || 'tasks';
   if (defaultTab !== 'tasks') switchTab(defaultTab);
@@ -21,13 +19,46 @@ socket && socket.on("connect", () => {
 
 socket && socket.on("disconnect", () => {
   statusDot.className = "dot error";
-  statusText.textContent = "Disconnected · Reconnecting......";
+  statusText.textContent = "Connection lost";
 });
 
 socket && socket.on("connect_error", () => {
   statusDot.className = "dot error";
   statusText.textContent = "Connection failed";
 });
+
+// ---- Theme (auto + manual toggle) ----
+function getAutoTheme() {
+  const h = new Date().getHours();
+  return h >= 6 && h < 18 ? 'light' : 'dark';
+}
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'light') root.classList.add('theme-light');
+  else root.classList.remove('theme-light');
+  updateThemeIcon(theme);
+}
+function updateThemeIcon(theme) {
+  const icon = document.getElementById('themeIcon');
+  if (!icon) return;
+  if (theme === 'light') {
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  } else {
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  }
+}
+function toggleTheme() {
+  const current = document.documentElement.classList.contains('theme-light') ? 'light' : 'dark';
+  const next = current === 'light' ? 'dark' : 'light';
+  localStorage.setItem('ydl_theme', next);
+  applyTheme(next);
+}
+function initTheme() {
+  const saved = localStorage.getItem('ydl_theme');
+  if (saved) applyTheme(saved);
+  else applyTheme(getAutoTheme());
+}
+initTheme();
 
 // ---- Task state ----
 let tasks = {};
@@ -168,6 +199,8 @@ function renderTasks() {
           <div class="context-menu">
             <button class="task-menu-btn" onclick="toggleTaskMenu('${menuId}')" title="More actions">&#8942;</button>
             <div class="context-menu-dropdown" id="${menuId}">
+              ${t.status === 'error' ? `<button class="context-menu-item" onclick="redownloadTask('${t.id}')">Redownload</button>` : ''}
+              ${t.status === 'error' && hasFile ? `<div class="context-menu-divider"></div>` : ''}
               ${hasFile ? `<button class="context-menu-item" onclick="openMoveModal(['${t.filename.replace(/'/g, "\\'")}'])">Move</button>` : ''}
               ${hasFile ? `<button class="context-menu-item" onclick="openSingleRename('${t.id}', '${t.filename.replace(/'/g, "\\'")}')">Rename</button>` : ''}
               ${hasFile ? `<div class="context-menu-divider"></div>` : ''}
@@ -223,7 +256,6 @@ document.getElementById("downloadForm").addEventListener("submit", async (e) => 
   const url = document.getElementById("urlInput").value.trim();
   const format = document.getElementById("formatSelect").value;
   const quality = document.getElementById("qualitySelect").value;
-  const plex = document.getElementById("plexCheck").checked;
   const customName = document.getElementById("customNameInput").value.trim();
   const category = document.getElementById("categorySelect").value;
   if (!url) return;
@@ -239,7 +271,7 @@ document.getElementById("downloadForm").addEventListener("submit", async (e) => 
     const res = await fetch("/download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, format, quality, plex_compatible: plex, custom_name: customName, category }),
+      body: JSON.stringify({ url, format, quality, custom_name: customName, category }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -323,7 +355,8 @@ async function loadHistory(page) {
                 ${hasFile ? `<button class="context-menu-item" onclick="openMoveModal(['${(item.filename || '').replace(/'/g, "\\'")}'])">Move</button>` : ''}
                 ${hasFile ? `<button class="context-menu-item" onclick="openHistoryRename('${item.ts}', '${(item.filename || '').replace(/'/g, "\\'")}')">Rename</button>` : ''}
                 <div class="context-menu-divider"></div>
-                <button class="context-menu-item danger" onclick="deleteHistoryRecord('${item.ts || ''}')">Delete</button>
+                <button class="context-menu-item danger" onclick="deleteHistoryRecord('${item.ts || ''}', false)">Delete record</button>
+                ${hasFile ? `<button class="context-menu-item danger" onclick="deleteHistoryRecord('${item.ts || ''}', true)">Delete file</button>` : ''}
               </div>
             </div>
           </div>
@@ -511,7 +544,6 @@ function populateServerConfig(cfg) {
   document.getElementById('setMaxMusicGb').value = cfg.max_music_size_gb ?? '';
   document.getElementById('setDefaultFormat').value = cfg.default_format || 'video';
   document.getElementById('setDefaultQuality').value = cfg.default_quality || '1080p';
-  document.getElementById('setPlexCompatible').checked = !!cfg.plex_compatible;
   document.getElementById('setStripPlaylist').checked = !!cfg.strip_playlist;
   document.getElementById('setCleanupPolicy').value = cfg.cleanup_policy || 'oldest_first';
   document.getElementById('setRetentionDays').value = cfg.retention_days ?? '';
@@ -524,6 +556,8 @@ function loadUIPrefsFromStorage() {
   document.getElementById('setShowUrl').checked = prefs.showUrl !== false;
   document.getElementById('setShowFilename').checked = prefs.showFilename !== false;
   document.getElementById('setShowQuality').checked = prefs.showQuality !== false;
+  document.getElementById('setWebTitle').value = prefs.webTitle || '';
+  if (prefs.webTitle) document.title = prefs.webTitle;
 }
 
 async function saveUIPrefs() {
@@ -533,9 +567,11 @@ async function saveUIPrefs() {
     showUrl: document.getElementById('setShowUrl').checked,
     showFilename: document.getElementById('setShowFilename').checked,
     showQuality: document.getElementById('setShowQuality').checked,
+    webTitle: document.getElementById('setWebTitle').value.trim(),
   };
   localStorage.setItem('ydl_ui_prefs', JSON.stringify(prefs));
-  // Reload history with new page size
+  if (prefs.webTitle) document.title = prefs.webTitle;
+  else document.title = 'YouTube Downloader';
   if (currentTab === 'logs') loadHistory(1);
   showSavedMsg('uiSavedMsg');
 }
@@ -557,7 +593,6 @@ async function saveServerConfig() {
       max_music_size_gb: parseFloat(document.getElementById('setMaxMusicGb').value) || 0,
       default_format: document.getElementById('setDefaultFormat').value,
       default_quality: document.getElementById('setDefaultQuality').value,
-      plex_compatible: document.getElementById('setPlexCompatible').checked,
       strip_playlist: document.getElementById('setStripPlaylist').checked,
       cleanup_policy: document.getElementById('setCleanupPolicy').value,
       retention_days: parseInt(document.getElementById('setRetentionDays').value) || 0,
@@ -735,6 +770,20 @@ function deleteTask(taskId) {
   }).then(() => socket.emit("request_tasks"));
 }
 
+function redownloadTask(taskId) {
+  if (!confirm('Remove this task and restart it?')) return;
+  fetch('/api/tasks/redownload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_id: taskId }),
+  }).then(r => r.json()).then(data => {
+    if (data.error) {
+      alert('Redownload failed: ' + data.error);
+    }
+    socket.emit("request_tasks");
+  });
+}
+
 function openSingleRename(taskId, filename) {
   const ext = filename ? filename.split('.').pop() : 'mp4';
   const base = filename ? filename.replace(/\.[^.]+$/, '') : '';
@@ -755,12 +804,66 @@ function openSingleRename(taskId, filename) {
 }
 
 // ---- History actions ----
-function deleteHistoryRecord(ts) {
-  if (!confirm('Remove this record from the download history?\n(File on disk is NOT deleted.)')) return;
+let _histCheckedCount = 0;
+
+function getSelectedHistoryIds() {
+  return Array.from(document.querySelectorAll('.hist-cb:checked')).map(cb => cb.dataset.ts);
+}
+
+function onHistCheckChange() {
+  _histCheckedCount = document.querySelectorAll('.hist-cb:checked').length;
+  const toolbar = document.getElementById('logToolbar');
+  const deleteBtn = document.getElementById('histDeleteBtn');
+  const selectAll = document.getElementById('histSelectAll');
+  if (_histCheckedCount > 0) {
+    toolbar.style.display = 'flex';
+    deleteBtn.style.display = 'inline-block';
+    selectAll.checked = _histCheckedCount === document.querySelectorAll('.hist-cb').length;
+  } else {
+    toolbar.style.display = 'none';
+    deleteBtn.style.display = 'none';
+  }
+  // Close delete menu if open
+  document.getElementById('histDeleteMenu').style.display = 'none';
+}
+
+function toggleAllHistory() {
+  const selectAll = document.getElementById('histSelectAll');
+  document.querySelectorAll('.hist-cb').forEach(cb => cb.checked = selectAll.checked);
+  onHistCheckChange();
+}
+
+function toggleHistDeleteMenu() {
+  const menu = document.getElementById('histDeleteMenu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function batchDeleteHistory(deleteFile) {
+  const ids = getSelectedHistoryIds();
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} record(s)?${deleteFile ? ' Files will also be deleted.' : ''}`)) return;
   fetch('/api/batch/delete-history', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids: [ts] }),
+    body: JSON.stringify({ ids, delete_file: deleteFile }),
+  }).then(r => r.json()).then(data => {
+    if (data.ok) {
+      document.getElementById('histDeleteMenu').style.display = 'none';
+      onHistCheckChange();
+      loadHistory(logPage);
+    } else {
+      alert('Error: ' + (data.error || 'Unknown error'));
+    }
+  });
+}
+
+function deleteHistoryRecord(ts, deleteFile) {
+  const label = deleteFile ? 'Delete this record and its file?' : 'Remove this record from the download history?\n(File on disk is NOT deleted.)';
+  if (!confirm(label)) return;
+  fetch('/api/batch/delete-history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: [ts], delete_file: deleteFile }),
   }).then(r => r.json()).then(data => {
     if (data.ok) {
       loadHistory(logPage);

@@ -4,20 +4,52 @@ Configurable via config.yaml
 """
 import os
 import subprocess
-
+import sys
 import threading
+
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 from tasks import task_manager
 import downloader
 import config
 from app_logging import get_logger
-from app_logging.downloads import read_downloads, count_downloads
+from app_logging.downloads import read_downloads, count_downloads, delete_download_records
 import music_tagging
 
 # Load config
 cfg = config.load_config()
 log = get_logger("server")
+
+
+# ---- Auto-update yt-dlp on startup (background) ----
+def _update_yt_dlp():
+    """Check and update yt-dlp in a background thread so it doesn't block server start."""
+    try:
+        python = sys.executable
+        result = subprocess.run(
+            [python, "-m", "pip", "install", "-U", "yt-dlp"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode == 0:
+            out = result.stdout.strip()
+            if "Requirement already satisfied" in out:
+                log.info("yt-dlp is up-to-date")
+            else:
+                # Extract version line from output
+                for line in out.splitlines():
+                    if "Successfully installed" in line or "yt-dlp" in line.lower():
+                        log.info("yt-dlp auto-updated: %s", line.strip())
+                        break
+                else:
+                    log.info("yt-dlp auto-update completed")
+        else:
+            log.warning("yt-dlp auto-update failed: %s", result.stderr.strip()[-200:])
+    except Exception as e:
+        log.warning("yt-dlp auto-update error: %s", e)
+
+
+_updater = threading.Thread(target=_update_yt_dlp, daemon=True)
+_updater.start()
 
 # Flask app
 app = Flask(__name__,
@@ -191,7 +223,7 @@ def update_config():
         "video_dir", "music_dir", "disk_limit_enabled",
         "max_video_size_gb", "max_music_size_gb",
         "cleanup_policy", "default_quality", "default_format",
-        "plex_compatible", "retention_days", "strip_playlist",
+        "retention_days", "strip_playlist",
     }
     filtered = {k: v for k, v in data.items() if k in allowed}
     if not filtered:
@@ -255,6 +287,39 @@ def remove_tasks():
     return jsonify({"ok": True, "removed": len(ids)})
 
 
+@app.route("/api/tasks/redownload", methods=["POST"])
+def redownload_task():
+    """
+    Remove an error task and restart it with the same URL/format/quality/category.
+    Body: { task_id: "..." }
+    """
+    data = request.get_json()
+    task_id = data.get("task_id", "")
+    old_task = task_manager.get_task(task_id)
+    if not old_task:
+        return jsonify({"error": "Task not found"}), 404
+
+    url = old_task.url
+    fmt = old_task.format
+    quality = old_task.quality
+    category = old_task.category
+
+    task_manager.remove_task(task_id)
+
+    cfg = config.load_config()
+    strip_playlist = cfg.get("strip_playlist", False)
+    new_task = task_manager.create_task(url, fmt, quality, category=category)
+
+    t = threading.Thread(
+        target=downloader.download_video,
+        args=(new_task.id, url, fmt, quality, "", strip_playlist, category),
+        daemon=True
+    )
+    t.start()
+
+    return jsonify({"task_id": new_task.id, "task": new_task.to_dict()})
+
+
 @app.route("/api/batch/delete-history", methods=["POST"])
 def batch_delete_history():
     """
@@ -263,11 +328,12 @@ def batch_delete_history():
     """
     data = request.get_json()
     ids = data.get("ids", [])
+    delete_file = bool(data.get("delete_file", False))
     if not isinstance(ids, list) or not ids:
         return jsonify({"error": "ids must be a non-empty list"}), 400
 
-    deleted = downloads.delete_download_records(ids)
-    log.info("Batch deleted %d history records", deleted)
+    deleted = delete_download_records(ids, delete_file=delete_file)
+    log.info("Batch deleted %d history records (delete_file=%s)", deleted, delete_file)
     return jsonify({"ok": True, "deleted": deleted})
 
 
@@ -432,7 +498,6 @@ def start_download():
     url = data.get("url", "").strip()
     fmt = data.get("format", "video")
     quality = data.get("quality", "1080p")
-    plex = data.get("plex_compatible", True)
     category = data.get("category")  # may be None
 
     if not url:
@@ -446,7 +511,7 @@ def start_download():
 
     t = threading.Thread(
         target=downloader.download_video,
-        args=(task.id, url, fmt, quality, plex, data.get("custom_name", ""), strip_playlist, category),
+        args=(task.id, url, fmt, quality, data.get("custom_name", ""), strip_playlist, category),
         daemon=True
     )
     t.start()

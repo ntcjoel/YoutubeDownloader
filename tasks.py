@@ -1,13 +1,19 @@
 """
 Task management module - all tasks stored in memory dict with state transitions and history
 """
+import os
+import json
 import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Optional
-from app_logging import get_logger
-log = get_logger("tasks")
 from threading import Lock
+from app_logging import get_logger
+
+log = get_logger("tasks")
+
+_TASKS_STATE_FILE = os.path.join(os.path.dirname(__file__), "tasks_state.json")
+
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -16,6 +22,7 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     ERROR = "error"
 
+
 class Task:
     def __init__(self, url: str, format: str, quality: str = "1080p", title: str = None, category: str = None):
         self.id = str(uuid.uuid4())[:8]
@@ -23,7 +30,7 @@ class Task:
         self.title = title
         self.format = format
         self.quality = quality
-        self.category = category  # None means use default dir by format
+        self.category = category
         self.status = TaskStatus.PENDING
         self.progress = 0
         self.message = "Pending..."
@@ -48,6 +55,25 @@ class Task:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Task":
+        t = cls(
+            url=d["url"],
+            format=d["format"],
+            quality=d.get("quality", "1080p"),
+            title=d.get("title"),
+            category=d.get("category"),
+        )
+        t.id = d["id"]
+        t.status = TaskStatus(d.get("status", "pending"))
+        t.progress = d.get("progress", 0)
+        t.message = d.get("message", "")
+        t.filename = d.get("filename")
+        t.error = d.get("error")
+        t.created_at = d.get("created_at", datetime.now().strftime("%H:%M:%S"))
+        t.updated_at = d.get("updated_at", datetime.now().strftime("%H:%M:%S"))
+        return t
 
     def update(self, status: Optional[TaskStatus] = None,
                 progress: Optional[int] = None,
@@ -78,12 +104,53 @@ class TaskManager:
         self._current_task_id: Optional[str] = None
         self._history: list[dict] = []
         self._history_page_size = 10
+        self._load_tasks()
+
+    def _load_tasks(self):
+        """Restore task states on startup. Incomplete tasks are marked as error."""
+        if not os.path.exists(_TASKS_STATE_FILE):
+            return
+        try:
+            with open(_TASKS_STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            log.warning("Failed to load task state: %s", e)
+            return
+        recovered = 0
+        for d in data:
+            # Skip completed tasks
+            if d.get("status") == "completed":
+                continue
+            # Mark incomplete tasks as error (interrupted)
+            if d.get("status") in ("downloading", "processing", "pending"):
+                d["status"] = "error"
+                d["error"] = d.get("error") or "Interrupted by server restart"
+                d["message"] = "Interrupted"
+            task = Task.from_dict(d)
+            self._tasks[task.id] = task
+            self._processing_queue.append(task.id)
+            recovered += 1
+        if recovered:
+            log.info("Recovered %d task(s) from previous session", recovered)
+
+    def _save_tasks(self):
+        """Persist all task states to disk."""
+        try:
+            with open(_TASKS_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump([t.to_dict() for t in self._tasks.values()], f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            log.warning("Failed to save task state: %s", e)
+
+    def save_tasks(self):
+        """Explicit save called by downloader after state changes."""
+        self._save_tasks()
 
     def create_task(self, url: str, format: str, quality: str = "1080p", category: str = None) -> Task:
         with self._lock:
             task = Task(url, format, quality, category=category)
             self._tasks[task.id] = task
             self._processing_queue.append(task.id)
+            self._save_tasks()
             return task
 
     def get_task(self, task_id: str) -> Optional[Task]:
@@ -124,6 +191,7 @@ class TaskManager:
                 self._processing_queue.remove(task_id)
             if self._current_task_id == task_id:
                 self._current_task_id = None
+        self._save_tasks()
 
     def clear_completed(self):
         """Remove all completed and error tasks"""
@@ -134,6 +202,7 @@ class TaskManager:
                 del self._tasks[tid]
                 if tid in self._processing_queue:
                     self._processing_queue.remove(tid)
+        self._save_tasks()
 
     def record_completed(self, task_id: str):
         """Record completed task in history"""

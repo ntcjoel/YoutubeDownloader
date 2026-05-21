@@ -5,6 +5,9 @@ Each completed/failed download gets one line appended.
 import os
 import json
 import config
+from app_logging import get_logger
+
+log = get_logger("downloads")
 
 
 def get_log_path() -> str:
@@ -119,10 +122,11 @@ def update_download_record(ts: str, updates: dict) -> bool:
     return True
 
 
-def delete_download_records(ts_list: list[str]) -> int:
+def delete_download_records(ts_list: list[str], delete_file: bool = False) -> int:
     """
     Delete records by their timestamp keys.
-    Returns the number of records actually deleted.
+    If delete_file=True and the record has a filename pointing to an existing file, delete it too.
+    Returns the number of records deleted.
     """
     if not ts_list:
         return 0
@@ -144,6 +148,14 @@ def delete_download_records(ts_list: list[str]) -> int:
                 continue
             if rec.get("ts") in ts_set:
                 deleted += 1
+                if delete_file and rec.get("filename"):
+                    fpath = rec["filename"]
+                    if os.path.isfile(fpath):
+                        try:
+                            os.remove(fpath)
+                            log.info("Deleted file: %s", fpath)
+                        except OSError as e:
+                            log.warning("Failed to delete file %s: %s", fpath, e)
                 continue
             records.append(rec)
 

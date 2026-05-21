@@ -8,18 +8,51 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #0f0f0f;
-      --surface: #1a1a1a;
-      --surface2: #252525;
-      --border: #333;
-      --accent: #ff4444;
-      --accent2: #ff7733;
-      --text: #e0e0e0;
-      --text2: #888;
-      --green: #44cc66;
-      --yellow: #ffcc33;
-      --red: #ff4444;
-      --blue: #4488ff;
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --surface3: #30363d;
+      --border: #30363d;
+      --accent: #238636;
+      --accent2: #c9d1d9;
+      --text: #e6edf3;
+      --text2: #8b949e;
+      --green: #238636;
+      --yellow: #d29922;
+      --red: #da3633;
+      --blue: #58a6ff;
+    }
+
+    /* Wood grain SVG filter */
+    svg#woodGrain {
+      position: absolute;
+      width: 0;
+      height: 0;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+    }
+
+    :root.theme-light {
+      --bg: #F5F0E8;
+      --surface: #FFFFFF;
+      --surface2: #EDE6DA;
+      --surface3: #E0D8CA;
+      --border: #C4B49A;
+      --accent: #4A7C59;
+      --accent2: #8B6914;
+      --text: #3D2B1F;
+      --text2: #7A6A58;
+      --green: #3A6B4A;
+      --yellow: #C1932A;
+      --red: #8B3A1F;
+      --blue: #4A7A8F;
     }
 
     body {
@@ -117,36 +150,6 @@
     #titlePreview.loading { color: var(--text2); font-style: italic; }
     #titlePreview.error { color: var(--red); }
 
-    /* Plex checkbox */
-    .plex-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .plex-row input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
-      accent-color: var(--accent);
-      cursor: pointer;
-    }
-    .plex-row label {
-      display: inline;
-      font-size: 0.85rem;
-      color: var(--text);
-      text-transform: none;
-      letter-spacing: 0;
-      cursor: pointer;
-      margin-bottom: 0;
-    }
-    .plex-hint {
-      font-size: 0.75rem;
-      color: var(--text2);
-      margin-left: 24px;
-      margin-top: -8px;
-      margin-bottom: 16px;
-    }
-
     .row { display: flex; gap: 12px; }
     .row .form-group { flex: 1; margin-bottom: 0; }
 
@@ -194,6 +197,20 @@
     }
     .dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
     .dot.error  { background: var(--red); }
+
+    .theme-toggle {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--text2);
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      transition: color 0.2s;
+      margin-left: auto;
+    }
+    .theme-toggle:hover { color: var(--accent); }
 
     .task-list { display: flex; flex-direction: column; gap: 10px; }
 
@@ -766,7 +783,13 @@
 <body>
   <div class="container">
     <h1>YouTube Downloader</h1>
-    <p class="subtitle">Real-time · WebSocket · Video + Audio</p>
+    <div class="status-bar">
+      <div class="dot" id="statusDot"></div>
+      <span id="statusText"></span>
+      <button class="theme-toggle" id="themeToggleBtn" title="Toggle theme" onclick="toggleTheme()">
+        <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </div>
 
     <!-- Tabs -->
     <div class="tabs">
@@ -778,11 +801,6 @@
 
     <!-- Task tab -->
     <div class="tab-pane active" id="pane-tasks">
-      <div class="status-bar">
-        <div class="dot" id="statusDot"></div>
-        <span id="statusText">Connecting......</span>
-      </div>
-
       <div class="card">
         <form id="downloadForm">
           <div class="form-group">
@@ -807,12 +825,6 @@
               placeholder="my_video"
               value="" />
           </div>
-
-          <div class="plex-row">
-            <input type="checkbox" id="plexCheck" checked />
-            <label for="plexCheck">Plex Server Compatible</label>
-          </div>
-          <div class="plex-hint">Prioritize H.264/AAC encoding, output MP4 format for Plex compatibility</div>
 
           <div class="row">
             <div class="form-group">
@@ -876,6 +888,12 @@
             </select>
           </div>
           <div class="settings-hint">Which tab to show when the page loads.</div>
+
+          <div class="settings-row">
+            <label class="settings-label">Web Title</label>
+            <input type="text" class="settings-input" id="setWebTitle" placeholder="YouTube Downloader" style="min-width:200px;" />
+          </div>
+          <div class="settings-hint">Custom page title. Leave blank for default.</div>
 
           <div class="settings-row">
             <label class="settings-label">History Page Size</label>
@@ -947,11 +965,6 @@
               <option value="480p">480p</option>
               <option value="360p">360p</option>
             </select>
-          </div>
-
-          <div class="settings-row">
-            <label class="settings-label">Plex Compatible</label>
-            <input type="checkbox" class="settings-check" id="setPlexCompatible" checked />
           </div>
 
           <div class="settings-row">

@@ -1,11 +1,6 @@
 categories:
-  movies:
-    dir: /home/sq/youtube-downloader/movies
-    enabled: true
-    max_size_gb: 0
-    name: Movies
   music:
-    dir: /home/sq/youtube-downloader/music
+    dir: /mnt/nfs/pt/ytb_music
     enabled: true
     max_size_gb: 0
     name: Music
@@ -17,9 +12,8 @@ host: 0.0.0.0
 log_dir: logs
 max_music_size_gb: 0
 max_video_size_gb: 0
-music_dir: /home/sq/youtube-downloader/music
-plex_compatible: true
+music_dir: /mnt/nfs/pt/music_video
 port: 1917
 retention_days: 0
 strip_playlist: true
-video_dir: /home/sq/youtube-downloader/video
+video_dir: /mnt/nfs/pt/ytb_video
