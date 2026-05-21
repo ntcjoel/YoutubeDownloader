@@ -14,7 +14,7 @@ import downloader
 import config
 from app_logging import get_logger
 from app_logging.downloads import read_downloads, count_downloads, delete_download_records, get_log_path as _get_downloads_log_path
-import downloads
+import app_logging.downloads as downloads
 import music_tagging
 
 # Load config
