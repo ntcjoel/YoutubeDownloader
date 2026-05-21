@@ -12,7 +12,7 @@ host: 0.0.0.0
 log_dir: logs
 max_music_size_gb: 0
 max_video_size_gb: 0
-music_dir: /mnt/nfs/pt/music_video
+music_dir: /mnt/nfs/pt/ytb_music
 port: 1917
 retention_days: 0
 strip_playlist: true
