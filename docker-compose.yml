@@ -11,7 +11,7 @@ services:
       - /mnt/nfs/pt/ytb_music:/app/music
       - ./logs:/app/logs
       - ./cookies:/app/cookies
-      - ./config.yaml:/app/config.yaml:ro
+      - ./config.yaml:/app/config.yaml
     environment:
       - TZ=Asia/Shanghai
     healthcheck:
