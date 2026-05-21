@@ -196,12 +196,10 @@ def save_config(values: dict) -> None:
     # Merge new values (only keys user is changing)
     existing.update(values)
 
-    # Write atomically via /tmp (always writable regardless of /app/ ownership)
-    import tempfile
-    tmp = os.path.join(tempfile.gettempdir(), "config.yaml.tmp")
-    with open(tmp, "w") as f:
+    # Write directly - config.yaml is a bind mount owned by the container user,
+    # so direct write is always safe. Omit atomic .tmp to avoid cross-fs rename issues.
+    with open(path, "w") as f:
         yaml.safe_dump(existing, f, default_flow_style=False, allow_unicode=True)
-    os.replace(tmp, path)
 
     # Invalidate cache so next call reloads
     _CONFIG = None
