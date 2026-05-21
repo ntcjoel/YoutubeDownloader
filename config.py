@@ -131,6 +131,10 @@ def get_cleanup_policy() -> str:
 def get_disk_limit_enabled() -> bool:
     return bool(get("disk_limit_enabled", False))
 
+def get_cookie_file() -> str:
+    return get("cookie_file", "")
+
+
 
 def save_config(values: dict) -> None:
     """

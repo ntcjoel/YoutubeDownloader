@@ -17,3 +17,4 @@ port: 1917
 retention_days: 0
 strip_playlist: true
 video_dir: /app/video
+cookie_file: ""

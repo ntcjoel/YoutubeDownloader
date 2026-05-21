@@ -381,6 +381,8 @@ def download_video(task_id: str, url: str, format: str, quality: str, custom_nam
                 # Capture metadata during extraction
                 "getcomments": True,
             }
+            if config.get_cookie_file():
+                ydl_opts["cookiefile"] = config.get_cookie_file()
             download_url = clean_url
         else:
             out_path = os.path.join(target_dir, f"{safe_name}.mp4")
@@ -396,6 +398,8 @@ def download_video(task_id: str, url: str, format: str, quality: str, custom_nam
                 "merge_output_format": "mp4",
                 "progress_hooks": [make_progress_hook(task_id)],
             }
+            if config.get_cookie_file():
+                ydl_opts["cookiefile"] = config.get_cookie_file()
             download_url = clean_url
 
         # Check / free disk space before downloading (only when disk limit is enabled)

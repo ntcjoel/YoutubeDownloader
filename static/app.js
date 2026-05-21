@@ -546,6 +546,7 @@ function populateServerConfig(cfg) {
   document.getElementById('setStripPlaylist').checked = !!cfg.strip_playlist;
   document.getElementById('setCleanupPolicy').value = cfg.cleanup_policy || 'oldest_first';
   document.getElementById('setRetentionDays').value = cfg.retention_days ?? '';
+  document.getElementById('setCookieFile').value = cfg.cookie_file || '';
 }
 
 function loadUIPrefsFromStorage() {
@@ -595,6 +596,7 @@ async function saveServerConfig() {
       strip_playlist: document.getElementById('setStripPlaylist').checked,
       cleanup_policy: document.getElementById('setCleanupPolicy').value,
       retention_days: parseInt(document.getElementById('setRetentionDays').value) || 0,
+      cookie_file: document.getElementById('setCookieFile').value.trim(),
     };
     const res = await fetch('/api/config', {
       method: 'POST',
