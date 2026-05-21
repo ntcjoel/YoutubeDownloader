@@ -7,7 +7,7 @@ categories:
 cleanup_policy: oldest_first
 cookie_content: ''
 cookie_custom_path: ''
-cookie_site: ''
+cookie_site: youtube
 default_format: video
 default_quality: 1080p
 disk_limit_enabled: false
