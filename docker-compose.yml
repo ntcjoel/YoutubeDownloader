@@ -6,6 +6,7 @@ services:
     ports:
       - "1917:1917"
     volumes:
+      - ./data/tasks_state.json:/app/tasks_state.json
       - /mnt/nfs/pt/ytb_video:/app/video
       - /mnt/nfs/pt/ytb_music:/app/music
       - ./logs:/app/logs
