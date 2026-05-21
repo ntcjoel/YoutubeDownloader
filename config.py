@@ -196,11 +196,9 @@ def save_config(values: dict) -> None:
     # Merge new values (only keys user is changing)
     existing.update(values)
 
-    # Write back atomically
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
+    # Write back directly (container user owns the mounted config.yaml)
+    with open(path, "w") as f:
         yaml.safe_dump(existing, f, default_flow_style=False, allow_unicode=True)
-    os.replace(tmp, path)
 
     # Invalidate cache so next call reloads
     _CONFIG = None
