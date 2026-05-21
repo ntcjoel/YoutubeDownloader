@@ -2,9 +2,8 @@ services:
   ytbdl:
     build: .
     container_name: ytbdl
+    network_mode: host
     restart: unless-stopped
-    ports:
-      - "1917:1917"
     volumes:
       - ./data/tasks_state.json:/app/tasks_state.json
       - /mnt/nfs/pt/ytb_video:/app/video
