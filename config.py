@@ -5,6 +5,8 @@ Environment variables take precedence over config.yaml values.
 import os
 import yaml
 from pathlib import Path
+from app_logging import get_logger
+log = get_logger("config")
 
 _CONFIG = None
 
