@@ -113,14 +113,18 @@ class TaskManager:
         if not os.path.exists(_TASKS_STATE_FILE):
             return
         try:
-            lock_fd = open(_TASKS_LOCK_FILE, "r")
-            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_SH)
-            try:
+            if os.path.exists(_TASKS_LOCK_FILE):
+                lock_fd = open(_TASKS_LOCK_FILE, "r")
+                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_SH)
+                try:
+                    with open(_TASKS_STATE_FILE, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                finally:
+                    fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+                    lock_fd.close()
+            else:
                 with open(_TASKS_STATE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-            finally:
-                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
-                lock_fd.close()
         except Exception as e:
             log.warning("Failed to load task state: %s", e)
             return
