@@ -115,11 +115,12 @@ async function fetchTitle(url) {
 
 function populateQualityDropdown(qualities) {
   const select = document.getElementById("qualitySelect");
-  const defaultQualities = ["1080p", "720p", "480p", "360p"];
-  if (qualities.length > 0) {
-    select.innerHTML = qualities.map(q => `<option value="${q}">${q}</option>`).join("");
-  } else {
-    select.innerHTML = defaultQualities.map(q => `<option value="${q}">${q}</option>`).join("");
+  const defaultQualities = ["2160p", "1440p", "1080p", "720p", "480p", "360p"];
+  const allQualities = qualities.length > 0 ? qualities : defaultQualities;
+  select.innerHTML = allQualities.map(q => `<option value="${q}">${q}</option>`).join("");
+  // Auto-select the highest available quality
+  if (allQualities.length > 0) {
+    select.value = allQualities[0];
   }
 }
 
@@ -399,6 +400,7 @@ async function loadSettings() {
     if (res.ok) {
       _serverConfig = await res.json();
       populateServerConfig(_serverConfig);
+      onCookieSiteChange();
     }
   } catch (e) {
     console.error('Failed to load server config:', e);
