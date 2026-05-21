@@ -6,3 +6,5 @@ music/
 logs/
 *.log
 .DS_Store
+tasks_state.json
+tasks_state.json.lock

@@ -7,6 +7,9 @@ import glob
 from urllib.parse import urlparse, parse_qs, urlencode
 import yt_dlp
 from tasks import task_manager, TaskStatus
+from threading import Semaphore
+
+_download_semaphore = Semaphore(3)  # max 3 concurrent downloads
 import config
 from app_logging import get_logger
 from app_logging.downloads import log_download
@@ -215,36 +218,57 @@ def embed_mp3_metadata(filepath: str, title: str, artist: str = "", thumbnail_ur
         return
 
     # Step 2: Embed thumbnail as APIC (album art) if provided
+    # Try YouTube thumbnail first, then fall back to alternative thumbnail URL formats
     if thumbnail_url:
         thumb_path = os.path.join(tempfile.gettempdir(), "ytb_thumb.jpg")
-        try:
-            sub = subprocess.run(
-                ["curl", "-s", "-o", thumb_path, thumbnail_url],
-                check=True, timeout=15
-            )
-            # Embed as APIC using FFmpeg's image2 demuxer with id3v2
-            embed_cmd = [
-                "ffmpeg", "-y",
-                "-i", tmp_out,
-                "-attach", thumb_path,
-                "-metadata:s:i", "1", "Cover (front)",
-                tmp_out + ".cover",
-            ]
-            result2 = subprocess.run(embed_cmd, capture_output=True, text=True, timeout=60)
-            if result2.returncode == 0:
-                os.replace(tmp_out + ".cover", tmp_out)
-                log.info("Embedded metadata + thumbnail: %s - %s", safe_artist, safe_title)
-            else:
-                log.warning("Thumbnail embed failed for %s: %s", filepath, result2.stderr[-200:])
-        except Exception as e:
-            log.warning("Thumbnail download/embed failed for %s: %s", filepath, e)
-        finally:
-            # Clean up thumbnail
-            if os.path.exists(thumb_path):
-                try:
-                    os.remove(thumb_path)
-                except Exception:
-                    pass
+        thumb_urls = [thumbnail_url]
+        # Add high-res thumbnail as fallback (maxresdefault > hqdefault)
+        if "hqdefault" in thumbnail_url:
+            thumb_urls.append(thumbnail_url.replace("hqdefault", "maxresdefault"))
+        elif "maxresdefault" not in thumbnail_url:
+            alt_url = thumbnail_url.rsplit("/", 1)[0] + "/maxresdefault.jpg"
+            thumb_urls.append(alt_url)
+
+        thumb_downloaded = False
+        for turl in thumb_urls:
+            try:
+                curl_result = subprocess.run(
+                    ["curl", "-s", "-o", thumb_path, "--max-time", "15", turl],
+                    timeout=20
+                )
+                # Verify the file is a valid image (non-empty)
+                if curl_result.returncode == 0 and os.path.getsize(thumb_path) > 1000:
+                    # Embed as APIC using FFmpeg's image2 demuxer with id3v2
+                    embed_cmd = [
+                        "ffmpeg", "-y",
+                        "-i", tmp_out,
+                        "-attach", thumb_path,
+                        "-metadata:s:i", "1", "Cover (front)",
+                        tmp_out + ".cover",
+                    ]
+                    result2 = subprocess.run(embed_cmd, capture_output=True, text=True, timeout=60)
+                    if result2.returncode == 0:
+                        os.replace(tmp_out + ".cover", tmp_out)
+                        log.info("Embedded metadata + thumbnail: %s - %s", safe_artist, safe_title)
+                        thumb_downloaded = True
+                        break
+                    else:
+                        log.warning("Thumbnail embed failed for %s: %s", filepath, result2.stderr[-200:])
+                else:
+                    log.warning("Thumbnail download returned empty for %s", turl)
+            except Exception as e:
+                log.warning("Thumbnail download/embed failed for %s: %s", turl, e)
+
+        # Clean up thumbnail
+        if os.path.exists(thumb_path):
+            try:
+                os.remove(thumb_path)
+            except Exception:
+                pass
+
+        if not thumb_downloaded:
+            # No thumbnail available - keep file with metadata only
+            log.info("Embedded metadata (no thumbnail): %s - %s", safe_artist, safe_title)
 
     # Move final file into place
     if os.path.exists(tmp_out):
@@ -301,145 +325,146 @@ def download_video(task_id: str, url: str, format: str, quality: str, custom_nam
     if not task:
         return
 
-    _ensure_dirs()
+    with _download_semaphore:
+        _ensure_dirs()
 
-    task.update(status=TaskStatus.DOWNLOADING, progress=0, message="Initializing...")
+        task.update(status=TaskStatus.DOWNLOADING, progress=0, message="Initializing...")
 
-    # Clean URL
-    clean_url = clean_youtube_url(url, strip_playlist=strip_playlist)
+        # Clean URL
+        clean_url = clean_youtube_url(url, strip_playlist=strip_playlist)
 
-    # Fetch and store title + metadata fields
-    info = get_video_info(clean_url)
-    title = info["title"]
-    uploader = info["uploader"]
-    thumbnail = info["thumbnail"]
-    task.update(title=title)
-    _emit_update(task_id)
-    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
-    # Determine filename: custom_name takes priority, otherwise use YouTube title
-    if custom_name:
-        # Strip extension if user included it
-        base = custom_name
-        if base.lower().endswith((".mp4", ".mp3", ".webm", ".mkv")):
-            base = base.rsplit(".", 1)[0]
-        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in base)
-    else:
-        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
+        # Fetch and store title + metadata fields
+        info = get_video_info(clean_url)
+        title = info["title"]
+        uploader = info["uploader"]
+        thumbnail = info["thumbnail"]
+        task.update(title=title)
+        _emit_update(task_id)
+        safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
+        # Determine filename: custom_name takes priority, otherwise use YouTube title
+        if custom_name:
+            # Strip extension if user included it
+            base = custom_name
+            if base.lower().endswith((".mp4", ".mp3", ".webm", ".mkv")):
+                base = base.rsplit(".", 1)[0]
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in base)
+        else:
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
 
-    # Resolve target directory from category or format defaults
-    target_dir, max_size_gb = _get_target_dir(format, category)
+        # Resolve target directory from category or format defaults
+        target_dir, max_size_gb = _get_target_dir(format, category)
 
-    # Build per-format output templates using target_dir
-    outtmpl_video = os.path.join(target_dir, f"{safe_name}.%(ext)s")
-    outtmpl_audio = os.path.join(target_dir, f"{safe_name}.%(ext)s")
+        # Build per-format output templates using target_dir
+        outtmpl_video = os.path.join(target_dir, f"{safe_name}.%(ext)s")
+        outtmpl_audio = os.path.join(target_dir, f"{safe_name}.%(ext)s")
 
-    if format == "audio":
-        out_path = os.path.join(target_dir, f"{safe_name}.mp3")
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": outtmpl_audio,
-            "quiet": True,
-            "no_warnings": True,
-            "progress_hooks": [make_progress_hook(task_id)],
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }, {
-                "key": "EmbedThumbnail",
-            }, {
-                "key": "FFmpegMetadata",
-                "add_metadata": True,
-            }],
-            "writethumbnail": True,
-            "merge_output_format": "mp3",
-            # Capture metadata during extraction
-            "getcomments": True,
-        }
-        download_url = clean_url
-    else:
-        out_path = os.path.join(target_dir, f"{safe_name}.mp4")
-        max_height = quality.replace("p", "")
-        video_format = f"bestvideo[height<={max_height}]+bestaudio/best"
+        if format == "audio":
+            out_path = os.path.join(target_dir, f"{safe_name}.mp3")
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": outtmpl_audio,
+                "quiet": True,
+                "no_warnings": True,
+                "progress_hooks": [make_progress_hook(task_id)],
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }, {
+                    "key": "EmbedThumbnail",
+                }, {
+                    "key": "FFmpegMetadata",
+                    "add_metadata": True,
+                }],
+                "writethumbnail": True,
+                "merge_output_format": "mp3",
+                # Capture metadata during extraction
+                "getcomments": True,
+            }
+            download_url = clean_url
+        else:
+            out_path = os.path.join(target_dir, f"{safe_name}.mp4")
+            max_height = quality.replace("p", "")
+            video_format = f"bestvideo[height<={max_height}]+bestaudio/best"
 
-        ydl_opts = {
-            "format": video_format,
-            "outtmpl": outtmpl_video,
-            "quiet": True,
-            "no_warnings": True,
-            "socket_timeout": 30,
-            "merge_output_format": "mp4",
-            "progress_hooks": [make_progress_hook(task_id)],
-        }
-        download_url = clean_url
+            ydl_opts = {
+                "format": video_format,
+                "outtmpl": outtmpl_video,
+                "quiet": True,
+                "no_warnings": True,
+                "socket_timeout": 30,
+                "merge_output_format": "mp4",
+                "progress_hooks": [make_progress_hook(task_id)],
+            }
+            download_url = clean_url
 
-    # Check / free disk space before downloading (only when disk limit is enabled)
-    if config.get_disk_limit_enabled() and max_size_gb > 0:
-        if not _cleanup_if_needed(target_dir, max_size_gb):
-            msg = "Disk limit reached, no files to free"
+        # Check / free disk space before downloading (only when disk limit is enabled)
+        if config.get_disk_limit_enabled() and max_size_gb > 0:
+            if not _cleanup_if_needed(target_dir, max_size_gb):
+                msg = "Disk limit reached, no files to free"
+                task.update(
+                    status=TaskStatus.ERROR,
+                    progress=0,
+                    message=msg,
+                    error="Disk limit exceeded"
+                )
+                log.error("Task %s failed: %s", task_id, msg)
+                log_download(
+                    url=url, title=title, filename="",
+                    fmt=format, quality=quality,
+                    size_mb=0, duration_s=0,
+                    status="failed", error=msg,
+                    category=category,
+                )
+                _emit_update(task_id)
+                return
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([download_url])
+
+            # Get file size and duration
+            size_mb = os.path.getsize(out_path) / (1024 * 1024) if os.path.exists(out_path) else 0
+            duration_s = 0
+
+            # Auto-embed MP3 metadata:
+            # - title: use safe_name (custom_name if provided, else YouTube title)
+            # - artist: uploader name from YouTube
+            # - thumbnail: YouTube video thumbnail (embedded as album art)
+            if format == "audio" and os.path.exists(out_path):
+                safe_display_title = safe_name.replace("_", " ").replace("-", " ").strip()
+                embed_mp3_metadata(out_path, title=safe_display_title, artist=uploader, thumbnail_url=thumbnail)
+
             task.update(
-                status=TaskStatus.ERROR,
-                progress=0,
-                message=msg,
-                error="Disk limit exceeded"
+                status=TaskStatus.COMPLETED,
+                progress=100,
+                message="Download complete",
+                filename=out_path
             )
-            log.error("Task %s failed: %s", task_id, msg)
+            task_manager.record_completed(task_id)
+            task_manager.save_tasks()
+            log.info("Task %s completed: %s -> %s (%.1f MB)", task_id, title, out_path, size_mb)
+            log_download(
+                url=url, title=title, filename=out_path,
+                fmt=format, quality=quality,
+                size_mb=size_mb, duration_s=duration_s,
+                status="success",
+                category=category,
+            )
+        except Exception as e:
+            log.error("Task %s failed: %s", task_id, e)
             log_download(
                 url=url, title=title, filename="",
                 fmt=format, quality=quality,
                 size_mb=0, duration_s=0,
-                status="failed", error=msg,
+                status="failed", error=str(e),
                 category=category,
             )
-            _emit_update(task_id)
-            return
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([download_url])
-
-        # Get file size and duration
-        size_mb = os.path.getsize(out_path) / (1024 * 1024) if os.path.exists(out_path) else 0
-        duration_s = 0
-
-        # Auto-embed MP3 metadata:
-        # - title: use safe_name (custom_name if provided, else YouTube title)
-        # - artist: uploader name from YouTube
-        # - thumbnail: YouTube video thumbnail (embedded as album art)
-        if format == "audio" and os.path.exists(out_path):
-            safe_display_title = safe_name.replace("_", " ").replace("-", " ").strip()
-            embed_mp3_metadata(out_path, title=safe_display_title, artist=uploader, thumbnail_url=thumbnail)
-
-        task.update(
-            status=TaskStatus.COMPLETED,
-            progress=100,
-            message="Download complete",
-            filename=out_path
-        )
-        task_manager.record_completed(task_id)
-        task_manager.save_tasks()
-        log.info("Task %s completed: %s -> %s (%.1f MB)", task_id, title, out_path, size_mb)
-        log_download(
-            url=url, title=title, filename=out_path,
-            fmt=format, quality=quality,
-            size_mb=size_mb, duration_s=duration_s,
-            status="success",
-            category=category,
-        )
-    except Exception as e:
-        log.error("Task %s failed: %s", task_id, e)
-        log_download(
-            url=url, title=title, filename="",
-            fmt=format, quality=quality,
-            size_mb=0, duration_s=0,
-            status="failed", error=str(e),
-            category=category,
-        )
-        task.update(
-            status=TaskStatus.ERROR,
-            progress=0,
-            message="Download failed",
-            error=str(e)
-        )
-        task_manager.save_tasks()
-    _emit_update(task_id)
+            task.update(
+                status=TaskStatus.ERROR,
+                progress=0,
+                message="Download failed",
+                error=str(e)
+            )
+            task_manager.save_tasks()
+        _emit_update(task_id)

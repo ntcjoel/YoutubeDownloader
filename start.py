@@ -13,7 +13,8 @@ from tasks import task_manager
 import downloader
 import config
 from app_logging import get_logger
-from app_logging.downloads import read_downloads, count_downloads, delete_download_records
+from app_logging.downloads import read_downloads, count_downloads, delete_download_records, get_log_path as _get_downloads_log_path
+import downloads
 import music_tagging
 
 # Load config

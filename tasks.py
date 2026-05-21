@@ -3,6 +3,7 @@ Task management module - all tasks stored in memory dict with state transitions 
 """
 import os
 import json
+import fcntl
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -13,6 +14,7 @@ from app_logging import get_logger
 log = get_logger("tasks")
 
 _TASKS_STATE_FILE = os.path.join(os.path.dirname(__file__), "tasks_state.json")
+_TASKS_LOCK_FILE = _TASKS_STATE_FILE + ".lock"
 
 
 class TaskStatus(str, Enum):
@@ -111,8 +113,14 @@ class TaskManager:
         if not os.path.exists(_TASKS_STATE_FILE):
             return
         try:
-            with open(_TASKS_STATE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            lock_fd = open(_TASKS_LOCK_FILE, "r")
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_SH)
+            try:
+                with open(_TASKS_STATE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            finally:
+                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+                lock_fd.close()
         except Exception as e:
             log.warning("Failed to load task state: %s", e)
             return
@@ -134,10 +142,16 @@ class TaskManager:
             log.info("Recovered %d task(s) from previous session", recovered)
 
     def _save_tasks(self):
-        """Persist all task states to disk."""
+        """Persist all task states to disk with file locking for thread safety."""
         try:
-            with open(_TASKS_STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump([t.to_dict() for t in self._tasks.values()], f, ensure_ascii=False, indent=2)
+            lock_fd = open(_TASKS_LOCK_FILE, "w")
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
+            try:
+                with open(_TASKS_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump([t.to_dict() for t in self._tasks.values()], f, ensure_ascii=False, indent=2)
+            finally:
+                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+                lock_fd.close()
         except Exception as e:
             log.warning("Failed to save task state: %s", e)
 
