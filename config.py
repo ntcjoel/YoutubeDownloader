@@ -34,7 +34,7 @@ def load_config() -> dict:
         _CONFIG.update(raw)
 
     # Migrate legacy cookie_file -> cookie_site + cookie_custom_path
-    if raw.get("cookie_file") and not raw.get("cookie_site"):
+    if "cookie_file" in raw and "cookie_site" not in raw:
         old_path = raw["cookie_file"]
         if old_path:
             _CONFIG["cookie_site"] = "custom"
