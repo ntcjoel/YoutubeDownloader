@@ -5,8 +5,6 @@ categories:
     max_size_gb: 0
     name: Music
 cleanup_policy: oldest_first
-cookie_content: ''
-cookie_custom_path: ''
 cookie_site: youtube
 default_format: video
 default_quality: 1080p

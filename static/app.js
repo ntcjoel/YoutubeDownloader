@@ -569,8 +569,6 @@ function populateServerConfig(cfg) {
   document.getElementById('setCleanupPolicy').value = cfg.cleanup_policy || 'oldest_first';
   document.getElementById('setRetentionDays').value = cfg.retention_days ?? '';
   document.getElementById('setCookieSite').value = cfg.cookie_site || '';
-  document.getElementById('cookieCustomRow').style.display = cfg.cookie_site === 'custom' ? 'flex' : 'none';
-  document.getElementById('setCookieCustomPath').value = cfg.cookie_custom_path || '';
   // Show cookie content row and load content for selected site
   const site = cfg.cookie_site || '';
   const cookieRow = document.getElementById('cookieContentRow');
@@ -634,7 +632,6 @@ async function saveServerConfig() {
       cleanup_policy: document.getElementById('setCleanupPolicy').value,
       retention_days: parseInt(document.getElementById('setRetentionDays').value) || 0,
       cookie_site: document.getElementById('setCookieSite').value,
-      cookie_custom_path: document.getElementById('setCookieCustomPath').value.trim(),
     };
     const res = await fetch('/api/config', {
       method: 'POST',

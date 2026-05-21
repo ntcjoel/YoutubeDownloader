@@ -996,13 +996,9 @@
             </select>
             <span class="settings-hint">Attach cookies for sites requiring login (age-gate, members-only content)</span>
           </div>
-          <div class="settings-row" id="cookieCustomRow" style="display:none;">
-            <label class="settings-label">Custom Path</label>
-            <input type="text" class="settings-input" id="setCookieCustomPath" placeholder="/app/cookies/mine.txt" style="min-width:280px;" />
-          </div>
           <div class="settings-row" id="cookieContentRow" style="display:none;">
             <label class="settings-label">Cookie Content</label>
-            <textarea class="settings-input" id="setCookieContent" rows="4" placeholder="Paste cookie content here (will be saved to the cookie file for the selected site)" style="min-width:320px;resize:vertical;font-family:monospace;font-size:11px;"></textarea>
+            <textarea class="settings-input" id="setCookieContent" rows="4" placeholder="Paste cookie content here (any site): Netscape format, one cookie per line (e.g. name=value; domain=.example.com; path=/; secure; HttpOnly)" style="min-width:320px;resize:vertical;font-family:monospace;font-size:11px;"></textarea>
           </div>
 
           <div class="settings-actions">

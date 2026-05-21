@@ -42,12 +42,11 @@ def load_config() -> dict:
     if raw:
         _CONFIG.update(raw)
 
-    # Migrate legacy cookie_file -> cookie_site + cookie_custom_path
+    # Migrate legacy cookie_file -> cookie_site
     if "cookie_file" in raw and "cookie_site" not in raw:
         old_path = raw["cookie_file"]
         if old_path:
             _CONFIG["cookie_site"] = "custom"
-            _CONFIG["cookie_custom_path"] = old_path
         # Remove legacy key so it doesn't persist
         _CONFIG.pop("cookie_file", None)
 
@@ -153,15 +152,12 @@ def get_cookie_site() -> str:
     """Which site to use cookies for: '', 'youtube', 'bilibili', 'tiktok', 'custom'."""
     return get("cookie_site", "")
 
-def get_cookie_custom_path() -> str:
-    """Custom cookie file path when site='custom'."""
-    return get("cookie_custom_path", "")
-
 # Map site key -> expected cookie file path inside the container
 _SITE_COOKIE_PATHS = {
-    "youtube":   "/app/cookies/youtube.txt",
-    "bilibili":  "/app/cookies/bilibili.txt",
-    "tiktok":    "/app/cookies/tiktok.txt",
+    "youtube":  "/app/cookies/youtube.txt",
+    "bilibili": "/app/cookies/bilibili.txt",
+    "tiktok":   "/app/cookies/tiktok.txt",
+    "custom":   "/app/cookies/custom.txt",
 }
 
 def get_cookie_file() -> str:
@@ -172,9 +168,6 @@ def get_cookie_file() -> str:
     site = get_cookie_site()
     if not site or site == "none":
         return ""
-    if site == "custom":
-        path = get_cookie_custom_path()
-        return path if path else ""
     return _SITE_COOKIE_PATHS.get(site, "")
 
 
@@ -216,12 +209,10 @@ def save_categories(categories: dict) -> None:
     """Save full categories dict to config.yaml."""
     save_config({"categories": categories})
 
-def _get_cookie_file_for_site(site: str, custom_path: str = "") -> str:
+def _get_cookie_file_for_site(site: str) -> str:
     """Resolve cookie file path given a site key (used during save)."""
     if not site or site == "none":
         return ""
-    if site == "custom":
-        return custom_path if custom_path else ""
     return _SITE_COOKIE_PATHS.get(site, "")
 
 
@@ -232,7 +223,7 @@ def save_cookie_file(site: str, content: str) -> bool:
     """
     if not site or site == "none":
         return False
-    path = _get_cookie_file_for_site(site, get_cookie_custom_path())
+    path = _get_cookie_file_for_site(site)
     if not path:
         return False
     try:
