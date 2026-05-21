@@ -64,7 +64,7 @@ socketio = SocketIO(
     transports=["polling", "websocket"],
     ping_timeout=20,
     ping_interval=5,
-    async_mode="gevent",
+    async_mode="eventlet",
 )
 
 # Wire up real broadcast function

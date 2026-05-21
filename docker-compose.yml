@@ -6,8 +6,8 @@ services:
     ports:
       - "1917:1917"
     volumes:
-      - ./video:/app/video
-      - ./music:/app/music
+      - /mnt/nfs/pt/ytb_video:/app/video
+      - /mnt/nfs/pt/ytb_music:/app/music
       - ./logs:/app/logs
       - ./config.yaml:/app/config.yaml:ro
     environment:
