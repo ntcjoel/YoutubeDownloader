@@ -430,7 +430,6 @@ function renderCategories() {
     <div class="settings-row" style="margin-bottom:10px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
       <div style="flex:1; min-width:0;">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-          <input type="checkbox" class="settings-check" id="cat_enabled_${escapeHtml(key)}" ${cat.enabled !== false ? 'checked' : ''} />
           <span style="font-size:0.88rem; font-weight:500; color:#fff;">${escapeHtml(cat.name || key)}</span>
           <span style="font-size:0.72rem; color:var(--text2);">(${escapeHtml(key)})</span>
         </div>
