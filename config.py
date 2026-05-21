@@ -4,9 +4,16 @@ Environment variables take precedence over config.yaml values.
 """
 import os
 import yaml
+import logging
+import sys
 from pathlib import Path
-from app_logging import get_logger
-log = get_logger("config")
+
+# Basic logging setup (avoid circular import with app_logging)
+_handler = logging.StreamHandler(sys.stderr)
+_handler.setFormatter(logging.Formatter('[%(asctime)s] [%(levelname)s] [config] %(message)s'))
+_logger = logging.getLogger("config")
+_logger.addHandler(_handler)
+log = _logger
 
 _CONFIG = None
 
