@@ -79,6 +79,7 @@ def _get_defaults() -> dict:
         "default_format": "video",
         "plex_compatible": True,
         "retention_days": 30,
+        "strip_playlist": False,
     }
 
 
@@ -153,3 +154,15 @@ def save_config(values: dict) -> None:
 
     # Invalidate cache so next call reloads
     _CONFIG = None
+
+
+# ---- Category config helpers ----
+
+def get_categories() -> dict:
+    """Return category dict from config, e.g. {'music': {'dir': '/path', 'enabled': True}, ...}"""
+    return get("categories", {})
+
+
+def save_categories(categories: dict) -> None:
+    """Save full categories dict to config.yaml."""
+    save_config({"categories": categories})

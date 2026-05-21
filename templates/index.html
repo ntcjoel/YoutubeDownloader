@@ -330,11 +330,95 @@
       animation: fadeIn 0.3s ease;
     }
 
+    .task-menu-btn {
+      background: transparent;
+      border: none;
+      color: var(--text2);
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .task-menu-btn:hover { background: var(--surface2); color: var(--text); }
+    .log-menu-btn { background: transparent; border: none; color: var(--text2); font-size: 1.1rem; cursor: pointer; padding: 2px 6px; border-radius: 4px; line-height: 1; flex-shrink: 0; }
+    .log-menu-btn:hover { background: var(--surface2); color: var(--text); }
+    .url-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .url-input-wrap:focus-within {
+      border-color: var(--accent);
+    }
+    .url-input-wrap input {
+      border: none !important;
+      border-radius: 0 !important;
+      flex: 1;
+      min-width: 0;
+    }
+    .url-input-wrap input:focus {
+      box-shadow: none !important;
+    }
+    .url-btn {
+      background: transparent;
+      border: none;
+      color: var(--text2);
+      width: 36px;
+      height: 36px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    .url-btn:hover { background: var(--surface3); color: var(--text); }
+    .url-btn:active { background: var(--border); }
+
+    .context-menu { position: relative; display: inline-flex; }
+    .context-menu-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 130px;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      overflow: hidden;
+    }
+    .context-menu-dropdown.show { display: block; }
+    .context-menu-item {
+      display: block;
+      width: 100%;
+      padding: 9px 14px;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 0.82rem;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .context-menu-item:hover { background: var(--surface2); }
+    .context-menu-item.danger { color: var(--red); }
+    .context-menu-item.danger:hover { background: rgba(255,68,68,0.1); }
+    .context-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
     .log-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       margin-bottom: 6px;
+      gap: 8px;
     }
 
     .log-title {
@@ -639,6 +723,11 @@
       accent-color: var(--accent);
       cursor: pointer;
     }
+    .settings-hint {
+      font-size: 0.7rem;
+      color: #667788;
+      margin-left: 8px;
+    }
     .settings-actions {
       display: flex;
       gap: 10px;
@@ -698,9 +787,17 @@
         <form id="downloadForm">
           <div class="form-group">
             <label>YouTube URL</label>
-            <input type="text" id="urlInput"
-              placeholder="https://www.youtube.com/watch?v=..."
-              value="" />
+            <div class="url-input-wrap">
+              <input type="text" id="urlInput"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value="" />
+              <button type="button" class="url-btn" id="pasteBtn" title="Paste">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button type="button" class="url-btn" id="urlClearBtn" title="Clear">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
             <div id="titlePreview"></div>
           </div>
 
@@ -718,6 +815,12 @@
           <div class="plex-hint">Prioritize H.264/AAC encoding, output MP4 format for Plex compatibility</div>
 
           <div class="row">
+            <div class="form-group">
+              <label>Category</label>
+              <select id="categorySelect">
+                <option value="">Default (auto)</option>
+              </select>
+            </div>
             <div class="form-group">
               <label>Format</label>
               <select id="formatSelect">
@@ -852,6 +955,12 @@
           </div>
 
           <div class="settings-row">
+            <label class="settings-label">Strip Playlist Params</label>
+            <input type="checkbox" class="settings-check" id="setStripPlaylist" />
+            <span class="settings-hint">Remove &list= and &start_radio= from URLs before downloading</span>
+          </div>
+
+          <div class="settings-row">
             <label class="settings-label">Cleanup Policy</label>
             <select class="settings-input" id="setCleanupPolicy">
               <option value="oldest_first">Delete Oldest First</option>
@@ -866,6 +975,22 @@
           </div>
           <div class="settings-saved-msg" id="serverSavedMsg">Server config saved successfully.</div>
           <div class="settings-error-msg" id="serverErrorMsg"></div>
+        </div>
+
+        <!-- Category Management -->
+        <div class="settings-section">
+          <div class="settings-section-title">Download Categories</div>
+          <div id="categoriesList"></div>
+          <div style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input type="text" id="newCatName" class="settings-input" placeholder="Category name" style="min-width:120px;" />
+            <input type="text" id="newCatDir" class="settings-input" placeholder="Directory path" style="min-width:200px;" />
+            <button type="button" class="btn-settings-save" onclick="addCategory()" style="padding:7px 16px; font-size:0.82rem;">Add Category</button>
+          </div>
+          <div class="settings-actions" style="margin-top:12px;">
+            <button type="button" class="btn-settings-save" id="saveCategoriesBtn" onclick="saveCategories()">Save Categories</button>
+          </div>
+          <div class="settings-saved-msg" id="categoriesSavedMsg">Categories saved successfully.</div>
+          <div class="settings-error-msg" id="categoriesErrorMsg"></div>
         </div>
       </div>
     </div>
@@ -929,518 +1054,46 @@
     </div>
   </div>
 
-  <!-- Socket.IO client (bundled locally) -->
-  <script src="/static/socket.io.min.js"></script>
-  <script>
-    // ---- WebSocket connection ----
-    const statusDot = document.getElementById("statusDot");
-    const statusText = document.getElementById("statusText");
+  <!-- Move Files Modal -->
+  <div class="modal-overlay" id="moveModal">
+    <div class="modal-box">
+      <div class="modal-title">Move Files to New Directory</div>
+      <div style="font-size:0.8rem; color:var(--text2); margin-bottom:16px;">
+        Selected files will be moved to the destination directory. Their paths in the history log will be updated.
+      </div>
+      <div class="form-group">
+        <label class="modal-label">Destination Directory</label>
+        <input type="text" class="modal-field" id="moveDestDir" placeholder="/path/to/destination" />
+        <div id="moveError" style="font-size:0.75rem; color:var(--red); margin-top:6px;"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeMoveModal()">Cancel</button>
+        <button class="btn-save" id="moveSubmitBtn" onclick="submitBatchMove()">Move</button>
+      </div>
+    </div>
+  </div>
 
-    const socket = io({
-      transports: ["polling", "websocket"],
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 10,
-    });
+  <!-- Rename Files Modal -->
+  <div class="modal-overlay" id="renameModal">
+    <div class="modal-box">
+      <div class="modal-title">Rename Files</div>
+      <div style="font-size:0.8rem; color:var(--text2); margin-bottom:16px;">
+        All selected files will be renamed to the same base name (extension preserved). The history log will be updated.
+      </div>
+      <div class="form-group">
+        <label class="modal-label">New Filename Base</label>
+        <input type="text" class="modal-field" id="renameNewBasename" placeholder="new_filename" />
+        <div id="renameError" style="font-size:0.75rem; color:var(--red); margin-top:6px;"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeRenameModal()">Cancel</button>
+        <button class="btn-save" id="renameSubmitBtn" onclick="submitBatchRename()">Rename</button>
+      </div>
+    </div>
+  </div>
 
-    socket.on("connect", () => {
-      statusDot.className = "dot active";
-      statusText.textContent = "Online · Real-time";
-      // Request current task list on connect
-      socket.emit("request_tasks");
-      // Apply default tab from localStorage prefs
-      const savedPrefs = JSON.parse(localStorage.getItem('ydl_ui_prefs') || '{}');
-      const defaultTab = savedPrefs.defaultTab || 'tasks';
-      if (defaultTab !== 'tasks') switchTab(defaultTab);
-    });
-
-    socket.on("disconnect", () => {
-      statusDot.className = "dot error";
-      statusText.textContent = "Disconnected · Reconnecting......";
-    });
-
-    socket.on("connect_error", () => {
-      statusDot.className = "dot error";
-      statusText.textContent = "Connection failed";
-    });
-
-    // ---- Task state ----
-    let tasks = {};
-
-    // ---- Tab switching ----
-    let currentTab = "tasks";
-
-    function switchTab(tab) {
-      currentTab = tab;
-      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-      document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
-      document.querySelector(`.tab[data-tab="${tab}"]`).classList.add("active");
-      document.getElementById(`pane-${tab}`).classList.add("active");
-      if (tab === "logs") loadHistory(1);
-      if (tab === "serverlog") loadServerLog();
-      if (tab === "settings" && !_settingsLoaded) {
-        _settingsLoaded = true;
-        loadSettings();
-      }
-    }
-
-    let _settingsLoaded = false;
-
-    let titleFetchTimer = null;
-    let logPage = 1;
-
-    // ---- Title preview on URL input ----
-    async function fetchTitle(url) {
-      if (!url || !url.includes("youtube.com") && !url.includes("youtu.be")) {
-        document.getElementById("titlePreview").textContent = "";
-        return;
-      }
-      const el = document.getElementById("titlePreview");
-      el.innerHTML = '<span class="spinner"></span>Fetching title......';
-      el.className = "loading";
-      try {
-        const resp = await fetch("/title?url=" + encodeURIComponent(url));
-        const data = await resp.json();
-        if (data.title) {
-          el.textContent = data.title;
-          el.className = "";
-        } else {
-          el.textContent = "Cannot Fetching title...";
-          el.className = "error";
-        }
-      } catch (e) {
-        el.textContent = "Failed to fetch title";
-        el.className = "error";
-      }
-    }
-
-    document.getElementById("urlInput").addEventListener("input", (e) => {
-      clearTimeout(titleFetchTimer);
-      const url = e.target.value.trim();
-      if (!url) {
-        document.getElementById("titlePreview").textContent = "";
-        return;
-      }
-      titleFetchTimer = setTimeout(() => fetchTitle(url), 600);
-    });
-
-    // ---- Task rendering ----
-    function renderTasks() {
-      const list = document.getElementById("taskList");
-      const arr = Object.values(tasks);
-      if (arr.length === 0) {
-        list.innerHTML = '<div class="empty">No Tasks</div>';
-        return;
-      }
-
-      // Read visibility prefs
-      const prefs = JSON.parse(localStorage.getItem('ydl_ui_prefs') || '{}');
-      const showUrl = prefs.showUrl !== false;
-      const showFilename = prefs.showFilename !== false;
-      const showQuality = prefs.showQuality !== false;
-
-      arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      list.innerHTML = arr.map(t => {
-        const badge = {
-          pending: "Pending",
-          downloading: "Downloading",
-          processing: "Processing",
-          completed: "Completed",
-          error: "Error",
-        }[t.status] || t.status;
-
-        const cls = {
-          pending: "badge-pending",
-          downloading: "badge-downloading",
-          processing: "badge-processing",
-          completed: "badge-completed",
-          error: "badge-error",
-        }[t.status] || "badge-pending";
-
-        const msg = t.error
-          ? `<span class="task-error">${t.error}</span>`
-          : `<span>${t.message || ""}</span><span>${t.progress !== undefined ? t.progress + "%" : ""}</span>`;
-
-        const filenameHtml = t.filename
-          ? `<div class="task-filename">&#128193; ${t.filename}</div>`
-          : "";
-
-        const urlLabel = showUrl ? (
-          `<div class="task-url-row">
-            <span class="task-url-label">URL</span>
-            <a class="task-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>
-          </div>`
-        ) : '';
-
-        const filenameHtml = showFilename && t.filename
-          ? `<div class="task-filename">&#128193; ${t.filename}</div>`
-          : '';
-
-        const qualityBadge = showQuality && t.quality
-          ? `<span class="log-badge" style="font-size:0.65rem;padding:2px 6px;border-radius:10px;background:#1a2a3a;color:#4488ff;margin-left:6px;">${t.quality}</span>`
-          : '';
-
-        return `
-          <div class="task">
-            <div class="task-header">
-              <div class="task-title">${t.title || t.url || "Unknown"}${qualityBadge}</div>
-              ${(t.format === 'audio' && t.filename && t.status === 'completed')
-                ? `<button class="btn-edit" onclick="openMetaModal('${t.filename.replace(/'/g, "\\'")}')">Edit Metadata</button>`
-                : ''}
-              <span class="task-badge ${cls}">${badge}</span>
-            </div>
-            ${urlLabel}
-            ${filenameHtml}
-            <div class="progress-wrap">
-              <div class="progress-bar" style="width:${t.progress || 0}%"></div>
-            </div>
-            <div class="task-message">${msg}</div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    // ---- WebSocket event handlers ----
-    socket.on("task_list", (serverTasks) => {
-      tasks = {};
-      for (const t of serverTasks) {
-        tasks[t.id] = t;
-      }
-      renderTasks();
-    });
-
-    socket.on("task_update", (task) => {
-      tasks[task.id] = task;
-      renderTasks();
-    });
-
-    socket.on("tasks_cleared", () => {
-      // Refresh full list from server
-      socket.emit("request_tasks");
-    });
-
-    socket.on("config_updated", (cfg) => {
-      _serverConfig = cfg;
-      populateServerConfig(cfg);
-    });
-
-    // ---- Download form ----
-    document.getElementById("downloadForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const url = document.getElementById("urlInput").value.trim();
-      const format = document.getElementById("formatSelect").value;
-      const quality = document.getElementById("qualitySelect").value;
-      const plex = document.getElementById("plexCheck").checked;
-      const customName = document.getElementById("customNameInput").value.trim();
-      if (!url) return;
-
-      const titleEl = document.getElementById("titlePreview");
-      const previewTitle = titleEl.textContent && !titleEl.className.includes("error")
-        ? titleEl.textContent : null;
-
-      document.getElementById("submitBtn").disabled = true;
-      document.getElementById("submitBtn").textContent = "Submitting......";
-
-      try {
-        const res = await fetch("/download", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, format, quality, plex_compatible: plex, custom_name: customName }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          alert("Error: " + (data.error || "UnknownError"));
-        } else if (data.task && previewTitle) {
-          data.task.title = previewTitle;
-          tasks[data.task.id] = data.task;
-          renderTasks();
-        }
-      } catch (err) {
-        alert("Request failed: " + err.message);
-      } finally {
-        document.getElementById("submitBtn").disabled = false;
-        document.getElementById("submitBtn").textContent = "Download";
-      }
-    });
-
-    // ---- Clear completed ----
-    document.getElementById("clearBtn").addEventListener("click", async () => {
-      await fetch("/clear", { method: "POST" });
-    });
-
-    // ---- History tab ----
-    async function loadHistory(page) {
-      logPage = page;
-      const logList = document.getElementById("logList");
-      const pagination = document.getElementById("logPagination");
-      logList.innerHTML = '<div class="log-empty"><span class="spinner"></span>Loading......</div>';
-
-      try {
-        const res = await fetch(`/logs?page=${page}`);
-        const data = await res.json();
-
-        if (!data.items || data.items.length === 0) {
-          logList.innerHTML = '<div class="log-empty">No download records</div>';
-          pagination.innerHTML = '';
-          return;
-        }
-
-        logList.innerHTML = data.items.map(item => {
-          const badgeClass = item.format === 'audio' ? 'audio' : 'video';
-          const badgeText = item.format === 'audio' ? 'MP3' : 'MP4';
-          const sizeStr = item.size_mb ? `${item.size_mb} MB` : '';
-          const statusIcon = item.status === 'success'
-            ? '<span style="color:var(--green)">&#10004;</span>'
-            : '<span style="color:var(--red)">&#10008;</span>';
-          return `
-            <div class="log-item">
-              <div class="log-header">
-                <div class="log-title">${item.title || item.url || 'Unknown title'}</div>
-                <span class="log-badge ${badgeClass}">${badgeText} · ${item.quality || ''}</span>
-              </div>
-              <div class="log-meta">
-                <span>${statusIcon} ${item.status || ''}</span>
-                <span>&#128196; ${item.ts ? item.ts.replace('T', ' ') : ''}</span>
-                ${sizeStr ? `<span>&#128190; ${sizeStr}</span>` : ''}
-              </div>
-              <div class="log-url">${item.url}</div>
-              ${item.filename ? `<div class="log-path">${item.filename}</div>` : ''}
-              ${item.error ? `<div style="font-size:0.75rem;color:var(--red);margin-top:4px;">Error: ${item.error}</div>` : ''}
-            </div>
-          `;
-        }).join('');
-
-        // Pagination controls
-        if (data.pages > 1) {
-          pagination.innerHTML = `
-            <button onclick="loadHistory(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>Prev</button>
-            <span class="page-info">Page ${data.page} / ${data.pages} (Total: ${data.total})</span>
-            <button onclick="loadHistory(${data.page + 1})" ${data.page >= data.pages ? 'disabled' : ''}>Next</button>
-          `;
-        } else {
-          pagination.innerHTML = `<span class="page-info">Total: ${data.total} records</span>`;
-        }
-      } catch (e) {
-        logList.innerHTML = '<div class="log-empty">Failed to load: ' + e.message + '</div>';
-        pagination.innerHTML = '';
-      }
-    }
-
-    // ---- Settings tab ----
-    let _serverConfig = null;
-
-    async function loadSettings() {
-      // Load server config from API
-      try {
-        const res = await fetch('/api/config');
-        if (res.ok) {
-          _serverConfig = await res.json();
-          populateServerConfig(_serverConfig);
-        }
-      } catch (e) {
-        console.error('Failed to load server config:', e);
-      }
-      // Load UI prefs from localStorage
-      loadUIPrefsFromStorage();
-    }
-
-    function populateServerConfig(cfg) {
-      if (!cfg) return;
-      document.getElementById('setVideoDir').value = cfg.video_dir || '';
-      document.getElementById('setMusicDir').value = cfg.music_dir || '';
-      document.getElementById('setDiskLimitEnabled').checked = !!cfg.disk_limit_enabled;
-      document.getElementById('setMaxVideoGb').value = cfg.max_video_size_gb ?? '';
-      document.getElementById('setMaxMusicGb').value = cfg.max_music_size_gb ?? '';
-      document.getElementById('setDefaultFormat').value = cfg.default_format || 'video';
-      document.getElementById('setDefaultQuality').value = cfg.default_quality || '1080p';
-      document.getElementById('setPlexCompatible').checked = !!cfg.plex_compatible;
-      document.getElementById('setCleanupPolicy').value = cfg.cleanup_policy || 'oldest_first';
-      document.getElementById('setRetentionDays').value = cfg.retention_days ?? '';
-    }
-
-    function loadUIPrefsFromStorage() {
-      const prefs = JSON.parse(localStorage.getItem('ydl_ui_prefs') || '{}');
-      document.getElementById('setDefaultTab').value = prefs.defaultTab || 'tasks';
-      document.getElementById('setHistoryPageSize').value = prefs.historyPageSize || '20';
-      document.getElementById('setShowUrl').checked = prefs.showUrl !== false;
-      document.getElementById('setShowFilename').checked = prefs.showFilename !== false;
-      document.getElementById('setShowQuality').checked = prefs.showQuality !== false;
-    }
-
-    async function saveUIPrefs() {
-      const prefs = {
-        defaultTab: document.getElementById('setDefaultTab').value,
-        historyPageSize: parseInt(document.getElementById('setHistoryPageSize').value),
-        showUrl: document.getElementById('setShowUrl').checked,
-        showFilename: document.getElementById('setShowFilename').checked,
-        showQuality: document.getElementById('setShowQuality').checked,
-      };
-      localStorage.setItem('ydl_ui_prefs', JSON.stringify(prefs));
-      // Reload history with new page size
-      if (currentTab === 'logs') loadHistory(1);
-      showSavedMsg('uiSavedMsg');
-    }
-
-    async function saveServerConfig() {
-      const btn = document.getElementById('saveServerConfigBtn');
-      const errEl = document.getElementById('serverErrorMsg');
-      const savedEl = document.getElementById('serverSavedMsg');
-      errEl.classList.remove('show');
-      savedEl.classList.remove('show');
-      btn.disabled = true;
-      btn.textContent = 'Saving...';
-      try {
-        const body = {
-          video_dir: document.getElementById('setVideoDir').value,
-          music_dir: document.getElementById('setMusicDir').value,
-          disk_limit_enabled: document.getElementById('setDiskLimitEnabled').checked,
-          max_video_size_gb: parseFloat(document.getElementById('setMaxVideoGb').value) || 0,
-          max_music_size_gb: parseFloat(document.getElementById('setMaxMusicGb').value) || 0,
-          default_format: document.getElementById('setDefaultFormat').value,
-          default_quality: document.getElementById('setDefaultQuality').value,
-          plex_compatible: document.getElementById('setPlexCompatible').checked,
-          cleanup_policy: document.getElementById('setCleanupPolicy').value,
-          retention_days: parseInt(document.getElementById('setRetentionDays').value) || 0,
-        };
-        const res = await fetch('/api/config', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (data.ok) {
-          _serverConfig = data.config;
-          showSavedMsg('serverSavedMsg');
-        } else {
-          errEl.textContent = 'Error: ' + (data.error || 'Unknown error');
-          errEl.classList.add('show');
-        }
-      } catch (e) {
-        errEl.textContent = 'Request failed: ' + e.message;
-        errEl.classList.add('show');
-      } finally {
-        btn.textContent = 'Save Server Config';
-        btn.disabled = false;
-      }
-    }
-
-    function showSavedMsg(id) {
-      const el = document.getElementById(id);
-      el.classList.add('show');
-      setTimeout(() => el.classList.remove('show'), 3000);
-    }
-
-    // ---- Server Log tab ----
-    async function loadServerLog() {
-      const output = document.getElementById("serverLogOutput");
-      output.innerHTML = '<div class="server-log-empty"><span class="spinner"></span>Loading......</div>';
-      try {
-        const res = await fetch("/api/app-log?lines=200");
-        const data = await res.json();
-        if (!data.lines || data.lines.length === 0) {
-          output.innerHTML = '<div class="server-log-empty">No server log entries yet</div>';
-          return;
-        }
-        output.innerHTML = '<pre class="server-log">' + data.lines.map(line => {
-          const cls = line.includes(' [ERROR]') ? 'log-error'
-                     : line.includes(' [WARNING]') ? 'log-warn'
-                     : 'log-info';
-          return `<div class="log-line ${cls}">${escapeHtml(line)}</div>`;
-        }).join('') + '</pre>';
-      } catch (e) {
-        output.innerHTML = '<div class="server-log-empty">Failed to load: ' + e.message + '</div>';
-      }
-    }
-
-    function escapeHtml(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-
-    // ---- Metadata Editor Modal ----
-    let _metaCurrentFilepath = null;
-
-    function openMetaModal(filepath) {
-      _metaCurrentFilepath = filepath;
-      document.getElementById('metaFilepath').textContent = filepath;
-      document.getElementById('metaArtist').value = '';
-      document.getElementById('metaTitle').value = '';
-      document.getElementById('metaAlbum').value = '';
-      document.getElementById('metaYear').value = '';
-      document.getElementById('metaGenre').value = '';
-      document.getElementById('metaCover').value = '';
-      document.getElementById('autofillBtn').innerHTML = 'Auto-fill';
-      document.getElementById('autofillBtn').disabled = false;
-      document.getElementById('metaModal').classList.add('open');
-    }
-
-    function closeMetaModal() {
-      document.getElementById('metaModal').classList.remove('open');
-      _metaCurrentFilepath = null;
-    }
-
-    async function doAutoFill() {
-      if (!_metaCurrentFilepath) return;
-      const btn = document.getElementById('autofillBtn');
-      btn.innerHTML = '<span class="autofill-spinner"></span>Searching...';
-      btn.disabled = true;
-      try {
-        const resp = await fetch('/api/metadata-form?filepath=' + encodeURIComponent(_metaCurrentFilepath));
-        const data = await resp.json();
-        if (data.error) {
-          alert('Error: ' + data.error);
-        } else {
-          const s = data.suggestion;
-          if (s.artist) document.getElementById('metaArtist').value = s.artist;
-          if (s.title) document.getElementById('metaTitle').value = s.title;
-          if (s.album) document.getElementById('metaAlbum').value = s.album;
-          if (s.year) document.getElementById('metaYear').value = s.year;
-          if (s.genre) document.getElementById('metaGenre').value = s.genre;
-          if (s.cover_url) document.getElementById('metaCover').value = s.cover_url;
-        }
-      } catch (e) {
-        alert('Auto-fill failed: ' + e.message);
-      } finally {
-        btn.innerHTML = 'Auto-fill';
-        btn.disabled = false;
-      }
-    }
-
-    async function doSaveMeta() {
-      if (!_metaCurrentFilepath) return;
-      const saveBtn = document.getElementById('metaSaveBtn');
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
-      try {
-        const resp = await fetch('/api/save-metadata', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            filepath: _metaCurrentFilepath,
-            artist: document.getElementById('metaArtist').value,
-            title: document.getElementById('metaTitle').value,
-            album: document.getElementById('metaAlbum').value,
-            year: document.getElementById('metaYear').value,
-            genre: document.getElementById('metaGenre').value,
-            cover_url: document.getElementById('metaCover').value,
-          }),
-        });
-        const data = await resp.json();
-        if (data.ok) {
-          closeMetaModal();
-        } else {
-          alert('Save failed: ' + (data.error || 'Unknown error'));
-        }
-      } catch (e) {
-        alert('Save failed: ' + e.message);
-      } finally {
-        saveBtn.textContent = 'Save';
-        saveBtn.disabled = false;
-      }
-    }
-
-    // Close modal on overlay click
-    document.getElementById('metaModal').addEventListener('click', function(e) {
-      if (e.target === this) closeMetaModal();
-    });
-  </script>
+  <!-- Socket.IO client (self-hosted v4.7.5) -->
+  <script src="/static/socket.io.client.min.js"></script>
+  <script src="/static/app.js"></script>
 </body>
 </html>

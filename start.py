@@ -4,8 +4,6 @@ Configurable via config.yaml
 """
 import os
 import subprocess
-import eventlet
-eventlet.monkey_patch()
 
 import threading
 from flask import Flask, render_template, jsonify, request
@@ -34,7 +32,7 @@ socketio = SocketIO(
     transports=["polling", "websocket"],
     ping_timeout=20,
     ping_interval=5,
-    async_mode="eventlet",
+    async_mode="gevent",
 )
 
 # Wire up real broadcast function
@@ -57,15 +55,18 @@ def get_tasks():
 
 @app.route("/title")
 def get_title():
-    """Extract YouTube video title from URL for input preview"""
+    """Extract YouTube video info from URL for input preview and quality options"""
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "URL is empty"}), 400
     try:
-        title = downloader.get_video_title(url)
-        return jsonify({"title": title})
+        info = downloader.get_video_info(url)
+        return jsonify({
+            "title": info.get("title", "video"),
+            "qualities": info.get("qualities", []),
+        })
     except Exception as e:
-        return jsonify({"title": None, "error": str(e)}), 500
+        return jsonify({"title": None, "qualities": [], "error": str(e)}), 500
 
 
 @app.route("/clear", methods=["POST"])
@@ -190,7 +191,7 @@ def update_config():
         "video_dir", "music_dir", "disk_limit_enabled",
         "max_video_size_gb", "max_music_size_gb",
         "cleanup_policy", "default_quality", "default_format",
-        "plex_compatible", "retention_days",
+        "plex_compatible", "retention_days", "strip_playlist",
     }
     filtered = {k: v for k, v in data.items() if k in allowed}
     if not filtered:
@@ -211,6 +212,192 @@ def update_config():
 
     log.info("Config updated: %s", list(filtered.keys()))
     return jsonify({"ok": True, "config": cfg})
+
+
+@app.route("/api/categories")
+def get_categories():
+    """Return current category definitions."""
+    return jsonify(config.get_categories())
+
+
+@app.route("/api/categories", methods=["POST"])
+def update_categories():
+    """
+    Save full categories dict to config.yaml.
+    Each category has: name, dir, enabled, max_size_gb (optional).
+    """
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+
+    try:
+        config.save_categories(data)
+    except Exception as e:
+        log.error("Failed to save categories: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+    log.info("Categories updated: %s", list(data.keys()))
+    return jsonify({"ok": True, "categories": data})
+
+
+@app.route("/api/tasks/remove", methods=["POST"])
+def remove_tasks():
+    """
+    Remove specific task IDs from the task manager.
+    Body: { ids: ["id1", "id2", ...] }
+    """
+    data = request.get_json()
+    ids = data.get("ids", [])
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids must be a list"}), 400
+    for task_id in ids:
+        task_manager.remove_task(task_id)
+    return jsonify({"ok": True, "removed": len(ids)})
+
+
+@app.route("/api/batch/delete-history", methods=["POST"])
+def batch_delete_history():
+    """
+    Delete selected history records by their timestamp keys.
+    Body: { ids: [ts1, ts2, ...] }
+    """
+    data = request.get_json()
+    ids = data.get("ids", [])
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"error": "ids must be a non-empty list"}), 400
+
+    deleted = downloads.delete_download_records(ids)
+    log.info("Batch deleted %d history records", deleted)
+    return jsonify({"ok": True, "deleted": deleted})
+
+
+@app.route("/api/batch/move-history", methods=["POST"])
+def batch_move_history():
+    """
+    Move files for selected history records to a new directory, then update the records.
+    Body: { ids: [ts1, ...], dest_dir: "/new/path" }
+    """
+    data = request.get_json()
+    ids = data.get("ids", [])
+    dest_dir = (data.get("dest_dir") or "").strip()
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"error": "ids must be a non-empty list"}), 400
+    if not dest_dir:
+        return jsonify({"error": "dest_dir is required"}), 400
+    if not os.path.isdir(dest_dir):
+        return jsonify({"error": f"Destination directory does not exist: {dest_dir}"}), 400
+
+    # Read all records and update those matching ids
+    path = downloads.get_log_path()
+    if not os.path.exists(path):
+        return jsonify({"error": "downloads.log not found"}), 404
+
+    import json as _json
+    records = []
+    moved = 0
+    errors = []
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = _json.loads(line)
+            except _json.JSONDecodeError:
+                continue
+            if rec.get("ts") in ids and rec.get("filename"):
+                old_path = rec["filename"]
+                if os.path.isfile(old_path):
+                    basename = os.path.basename(old_path)
+                    new_path = os.path.join(dest_dir, basename)
+                    try:
+                        os.rename(old_path, new_path)
+                        rec["filename"] = new_path
+                        moved += 1
+                    except OSError as e:
+                        errors.append(f"{old_path}: {e}")
+                else:
+                    errors.append(f"File not found: {old_path}")
+            records.append(rec)
+
+    if moved > 0:
+        with open(path, "w", encoding="utf-8") as f:
+            for rec in records:
+                f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+
+    log.info("Batch moved %d files to %s (%d errors)", moved, dest_dir, len(errors))
+    return jsonify({"ok": True, "moved": moved, "errors": errors})
+
+
+@app.route("/api/batch/rename-history", methods=["POST"])
+def batch_rename_history():
+    """
+    Rename files for selected history records (rename in-place with new base name).
+    Body: { ids: [ts1, ...], new_basename: "new_name" }
+    The extension is preserved from the original file.
+    """
+    data = request.get_json()
+    ids = data.get("ids", [])
+    new_basename = (data.get("new_basename") or "").strip()
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"error": "ids must be a non-empty list"}), 400
+    if not new_basename:
+        return jsonify({"error": "new_basename is required"}), 400
+
+    # Sanitize: keep only safe chars
+    import re
+    safe_name = re.sub(r"[^\w\- ]", "_", new_basename)
+    safe_name = re.sub(r" +", " ", safe_name).strip()
+    if not safe_name:
+        return jsonify({"error": "new_basename contains no valid characters"}), 400
+
+    path = downloads.get_log_path()
+    if not os.path.exists(path):
+        return jsonify({"error": "downloads.log not found"}), 404
+
+    import json as _json
+    records = []
+    renamed = 0
+    errors = []
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = _json.loads(line)
+            except _json.JSONDecodeError:
+                continue
+            if rec.get("ts") in ids and rec.get("filename"):
+                old_path = rec["filename"]
+                if os.path.isfile(old_path):
+                    dir_part = os.path.dirname(old_path)
+                    ext = os.path.splitext(old_path)[1]
+                    new_path = os.path.join(dir_part, f"{safe_name}{ext}")
+                    if new_path == old_path:
+                        renamed += 1  # no-op but count as processed
+                    else:
+                        try:
+                            os.rename(old_path, new_path)
+                            rec["filename"] = new_path
+                            # Also update title to match new basename
+                            rec["title"] = safe_name
+                            renamed += 1
+                        except OSError as e:
+                            errors.append(f"{old_path}: {e}")
+                else:
+                    errors.append(f"File not found: {old_path}")
+            records.append(rec)
+
+    if renamed > 0:
+        with open(path, "w", encoding="utf-8") as f:
+            for rec in records:
+                f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+
+    log.info("Batch renamed %d files (%d errors)", renamed, len(errors))
+    return jsonify({"ok": True, "renamed": renamed, "errors": errors})
 
 
 def _read_current_metadata(filepath: str) -> dict:
@@ -246,15 +433,20 @@ def start_download():
     fmt = data.get("format", "video")
     quality = data.get("quality", "1080p")
     plex = data.get("plex_compatible", True)
+    category = data.get("category")  # may be None
 
     if not url:
         return jsonify({"error": "URL cannot be empty"}), 400
 
-    task = task_manager.create_task(url, fmt, quality)
+    task = task_manager.create_task(url, fmt, quality, category=category)
+
+    # Read server config for download behaviour flags
+    cfg = config.load_config()
+    strip_playlist = cfg.get("strip_playlist", False)
 
     t = threading.Thread(
         target=downloader.download_video,
-        args=(task.id, url, fmt, quality, plex, data.get("custom_name", "")),
+        args=(task.id, url, fmt, quality, plex, data.get("custom_name", ""), strip_playlist, category),
         daemon=True
     )
     t.start()

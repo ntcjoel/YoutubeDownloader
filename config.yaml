@@ -1,32 +1,25 @@
-# YouTube Downloader Configuration
-
-# Server binding
-host: "0.0.0.0"
-port: 1917
-
-# Directory paths (absolute or relative to project root)
-video_dir: "/mnt/nfs/pt/ytb_video"
-music_dir: "/mnt/nfs/pt/ytb_music"
-log_dir: "logs"
-
-# Disk limit switch: true = enforce max size limits below
-#   false = no size limits (NFS/remote storage manages its own space)
+categories:
+  movies:
+    dir: /home/sq/youtube-downloader/movies
+    enabled: true
+    max_size_gb: 0
+    name: Movies
+  music:
+    dir: /home/sq/youtube-downloader/music
+    enabled: true
+    max_size_gb: 0
+    name: Music
+cleanup_policy: oldest_first
+default_format: video
+default_quality: 1080p
 disk_limit_enabled: false
-
-# Disk usage limits (in GB, only used when disk_limit_enabled: true)
-max_video_size_gb: 50
-max_music_size_gb: 10
-
-# Cleanup policy when limit is exceeded (only when disk_limit_enabled: true)
-#   oldest_first  - delete oldest completed files until under limit
-#   skip          - reject new downloads when at limit
-cleanup_policy: "oldest_first"
-
-# Download defaults
-default_quality: "1080p"
-default_format: "video"
+host: 0.0.0.0
+log_dir: logs
+max_music_size_gb: 0
+max_video_size_gb: 0
+music_dir: /home/sq/youtube-downloader/music
 plex_compatible: true
-
-# Download history
-#   retention_days: how many days to keep history records (0 = forever)
-retention_days: 30
+port: 1917
+retention_days: 0
+strip_playlist: true
+video_dir: /home/sq/youtube-downloader/video

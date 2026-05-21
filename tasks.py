@@ -17,12 +17,13 @@ class TaskStatus(str, Enum):
     ERROR = "error"
 
 class Task:
-    def __init__(self, url: str, format: str, quality: str = "1080p", title: str = None):
+    def __init__(self, url: str, format: str, quality: str = "1080p", title: str = None, category: str = None):
         self.id = str(uuid.uuid4())[:8]
         self.url = url
         self.title = title
         self.format = format
         self.quality = quality
+        self.category = category  # None means use default dir by format
         self.status = TaskStatus.PENDING
         self.progress = 0
         self.message = "Pending..."
@@ -38,6 +39,7 @@ class Task:
             "title": self.title,
             "format": self.format,
             "quality": self.quality,
+            "category": self.category,
             "status": self.status.value,
             "progress": self.progress,
             "message": self.message,
@@ -77,9 +79,9 @@ class TaskManager:
         self._history: list[dict] = []
         self._history_page_size = 10
 
-    def create_task(self, url: str, format: str, quality: str = "1080p") -> Task:
+    def create_task(self, url: str, format: str, quality: str = "1080p", category: str = None) -> Task:
         with self._lock:
-            task = Task(url, format, quality)
+            task = Task(url, format, quality, category=category)
             self._tasks[task.id] = task
             self._processing_queue.append(task.id)
             return task

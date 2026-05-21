@@ -1,36 +1,27 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies (ffmpeg for yt-dlp post-processing)
+# Install system deps (ffmpeg for metadata, curl for yt-dlp updates)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# Install yt-dlp (latest)
+RUN curl -sSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+    -o /usr/local/bin/yt-dlp && chmod +x /usr/local/bin/yt-dlp
+
+# Install Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
-COPY config.yaml .
-COPY app.py .
-COPY start.py .
-COPY downloader.py .
-COPY tasks.py .
-COPY config.py .
-COPY requirements.txt .
-COPY templates/ ./templates/
-COPY static/ ./static/
+# Copy app (exclude venv, __pycache__, video, music, logs from host)
+COPY . .
 
-# Create output directories
-RUN mkdir -p video music
+# Create output dirs inside image (fallback, volumes override them)
+RUN mkdir -p /app/video /app/music /app/logs
 
-# Default server port
 EXPOSE 1917
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:1917/')" || exit 1
-
-# Run
 CMD ["python", "start.py"]

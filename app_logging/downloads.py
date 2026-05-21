@@ -23,6 +23,7 @@ def log_download(
     duration_s: int,
     status: str,
     error: str = None,
+    category: str = None,
 ) -> None:
     """
     Append one JSON record to downloads.log.
@@ -41,6 +42,8 @@ def log_download(
     }
     if error:
         record["error"] = error
+    if category:
+        record["category"] = category
 
     path = get_log_path()
     with open(path, "a", encoding="utf-8") as f:
@@ -80,3 +83,71 @@ def count_downloads() -> int:
         return 0
     with open(path, "r", encoding="utf-8") as f:
         return sum(1 for line in f if line.strip())
+
+
+def update_download_record(ts: str, updates: dict) -> bool:
+    """
+    Update a single download record by its timestamp key.
+    Rewrites the log file. Returns True if the record was found and updated.
+    """
+    path = get_log_path()
+    if not os.path.exists(path):
+        return False
+
+    records = []
+    found = False
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("ts") == ts:
+                rec.update(updates)
+                found = True
+            records.append(rec)
+
+    if not found:
+        return False
+
+    with open(path, "w", encoding="utf-8") as f:
+        for rec in records:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return True
+
+
+def delete_download_records(ts_list: list[str]) -> int:
+    """
+    Delete records by their timestamp keys.
+    Returns the number of records actually deleted.
+    """
+    if not ts_list:
+        return 0
+    ts_set = set(ts_list)
+    path = get_log_path()
+    if not os.path.exists(path):
+        return 0
+
+    records = []
+    deleted = 0
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("ts") in ts_set:
+                deleted += 1
+                continue
+            records.append(rec)
+
+    with open(path, "w", encoding="utf-8") as f:
+        for rec in records:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return deleted
