@@ -287,7 +287,7 @@ function togglePlaylistCollapse(taskId) {
 }
 
 async function cancelPlaylist(taskId) {
-  if (!confirm('Cancel this playlist download?')) return;
+  
   await fetch("/api/playlist/cancel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
