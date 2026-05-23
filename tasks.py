@@ -14,7 +14,8 @@ from app_logging import get_logger
 log = get_logger("tasks")
 
 _TASKS_STATE_FILE = os.path.join(os.path.dirname(__file__), "tasks_state.json")
-_TASKS_LOCK_FILE = _TASKS_STATE_FILE + ".lock"
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "logs")  # only dir 1000:1000 can write to
+_TASKS_LOCK_FILE = os.path.join(_DATA_DIR, "tasks_state.json.lock")
 
 
 class TaskStatus(str, Enum):
