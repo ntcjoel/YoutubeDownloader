@@ -104,10 +104,6 @@ All settings live in `config.yaml`:
 host: "0.0.0.0"
 port: 1917
 
-# Directory paths (absolute paths recommended)
-video_dir: "/mnt/nfs/pt/ytb_video"
-music_dir: "/mnt/nfs/pt/ytb_music"
-
 # Disk usage limits in GB (0 = no limit)
 max_video_size_gb: 0
 max_music_size_gb: 0
@@ -132,6 +128,28 @@ categories:
 
 # History retention in days (0 = forever)
 retention_days: 30
+```
+
+### Path configuration by deployment method
+
+**Docker:** `config.yaml` uses **container-internal paths**. The docker-compose volume mounts map these to host directories.
+
+| config key | container path | typical host mount |
+|---|---|---|
+| `video_dir` | `/app/video` | `/mnt/nfs/pt/ytb_video` |
+| `music_dir` | `/app/music` | `/mnt/nfs/pt/ytb_music` |
+
+Example `config.yaml` for Docker:
+```yaml
+video_dir: "/app/video"
+music_dir: "/app/music"
+```
+
+**Bare metal:** `config.yaml` uses **host paths directly**.
+
+```yaml
+video_dir: "/mnt/nfs/pt/ytb_video"
+music_dir: "/mnt/nfs/pt/ytb_music"
 ```
 
 ### Environment Variable Overrides
