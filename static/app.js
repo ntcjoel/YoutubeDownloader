@@ -1,3 +1,7 @@
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("urlInput").value = "";
+  hidePlaylistBanner();
+});
 // ---- WebSocket connection ----
 const statusDot = document.getElementById("statusDot");
 const statusText = document.getElementById("statusText");
@@ -12,6 +16,7 @@ socket && socket.on("connect", () => {
   statusDot.className = "dot active";
   statusText.textContent = "";
   socket.emit("request_tasks");
+  hidePlaylistBanner();
   const savedPrefs = JSON.parse(localStorage.getItem('ydl_ui_prefs') || '{}');
   const defaultTab = savedPrefs.defaultTab || 'tasks';
   if (defaultTab !== 'tasks') switchTab(defaultTab);
@@ -116,7 +121,7 @@ async function fetchTitle(url) {
   // Hide playlist banner while fetching
   hidePlaylistBanner();
   const el = document.getElementById("titlePreview");
-  el.innerHTML = '<span class="spinner"></span>Fetching title......';
+  el.innerHTML = '<span class="spinner"></span>Fetching...';
   el.className = "loading";
   try {
     // Use /api/parse which returns both title and is_playlist info
@@ -294,6 +299,7 @@ async function cancelPlaylist(taskId) {
     body: JSON.stringify({ task_id: taskId }),
   });
   socket.emit("request_tasks");
+  hidePlaylistBanner();
 }
 
 function renderSingleTask(t, showUrl, showFilename, showQuality) {
@@ -384,6 +390,7 @@ if (socket) {
 
   socket.on("tasks_cleared", () => {
     socket.emit("request_tasks");
+  hidePlaylistBanner();
   });
 
   socket.on("config_updated", (cfg) => {
@@ -1039,6 +1046,7 @@ function redownloadTask(taskId) {
       alert('Redownload failed: ' + data.error);
     }
     socket.emit("request_tasks");
+  hidePlaylistBanner();
   });
 }
 
@@ -1055,6 +1063,7 @@ function openSingleRename(taskId, filename) {
   }).then(r => r.json()).then(data => {
     if (data.ok) {
       socket.emit("request_tasks");
+  hidePlaylistBanner();
     } else {
       alert('Rename failed: ' + (data.error || 'Unknown error'));
     }
@@ -1186,6 +1195,7 @@ async function submitBatchMove() {
       closeMoveModal();
       loadHistory(logPage);
       socket.emit("request_tasks");
+  hidePlaylistBanner();
       if (data.errors && data.errors.length > 0) {
         alert('Moved with errors:\n' + data.errors.join('\n'));
       }
@@ -1237,6 +1247,7 @@ async function submitBatchRename() {
       closeRenameModal();
       loadHistory(logPage);
       socket.emit("request_tasks");
+  hidePlaylistBanner();
       if (data.errors && data.errors.length > 0) {
         alert('Renamed with errors:\n' + data.errors.join('\n'));
       }
