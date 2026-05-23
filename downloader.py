@@ -342,6 +342,9 @@ def download_video(task_id: str, url: str, format: str, quality: str, custom_nam
         uploader = info["uploader"]
         thumbnail = info["thumbnail"]
         task.update(title=title)
+        # Clear quality for audio format — resolution is meaningless for MP3
+        if format == "audio":
+            quality = ""
         _emit_update(task_id)
         safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
         # Determine filename: custom_name takes priority, otherwise use YouTube title
