@@ -154,6 +154,44 @@
     .row .form-group { flex: 1; margin-bottom: 0; }
 
     .btn {
+
+    /* Playlist banner */
+    #playlistBanner {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      background: #1a2535;
+      border: 1px solid #2a3a5a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-top: 8px;
+      font-size: 0.85rem;
+    }
+    #playlistBanner.show { display: flex; }
+    #playlistBanner .pl-icon { color: #f0a040; font-size: 1.1rem; flex-shrink: 0; }
+    #playlistBanner .pl-info { flex: 1; min-width: 0; }
+    #playlistBanner .pl-title { color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #playlistBanner .pl-meta { color: var(--text2); font-size: 0.75rem; margin-top: 2px; }
+    #playlistBanner .pl-count { color: #f0a040; font-weight: 600; }
+    #playlistBanner .pl-spinner { color: var(--text2); font-style: italic; }
+    #playlistBanner .btn { padding: 6px 14px; font-size: 0.8rem; border-radius: 6px; }
+    #playlistBanner .btn-pl-download { background: var(--accent); color: #fff; border: none; cursor: pointer; }
+    #playlistBanner .btn-pl-download:hover { opacity: 0.85; }
+    #playlistBanner .btn-pl-cancel { background: transparent; border: 1px solid var(--border); color: var(--text2); cursor: pointer; margin-left: 6px; }
+    #playlistBanner .btn-pl-cancel:hover { border-color: var(--red); color: var(--red); }
+
+    /* Playlist task in task list */
+    .task-children { margin-top: 4px; padding-left: 16px; border-left: 2px solid #1a2a3a; }
+    .task-child { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; padding: 2px 0; color: var(--text2); }
+    .task-child .tc-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-child .tc-status { flex-shrink: 0; font-size: 0.72rem; }
+    .task-child .tc-status.done { color: var(--green); }
+    .task-child .tc-status.err { color: var(--red); }
+    .task-child .tc-status.pending { color: var(--text2); }
+    .task-child .tc-status.downloading { color: #4488ff; }
+    .task-child .progress-mini { width: 60px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+    .task-child .progress-mini-fill { height: 100%; background: #4488ff; transition: width 0.3s; }
+
       background: var(--accent);
       color: #fff;
       border: none;
@@ -230,6 +268,17 @@
     .task-header {
       display: flex;
       justify-content: space-between;
+
+    .collapse-btn {
+      cursor: pointer;
+      color: var(--text2);
+      font-size: 0.65rem;
+      margin-right: 4px;
+      user-select: none;
+      flex-shrink: 0;
+      padding: 2px 4px;
+    }
+    .collapse-btn:hover { color: var(--accent); }
       align-items: flex-start;
       margin-bottom: 8px;
     }
@@ -817,6 +866,16 @@
               </button>
             </div>
             <div id="titlePreview"></div>
+            <div id="playlistBanner">
+              <span class="pl-icon">&#9835;</span>
+              <div class="pl-info">
+                <div class="pl-title" id="plTitle"></div>
+                <div class="pl-meta"><span class="pl-count" id="plCount"></span> videos detected</div>
+              </div>
+              <span class="pl-spinner" id="plSpinner">Fetching list...</span>
+              <button type="button" class="btn btn-pl-download" id="plDownloadBtn" style="display:none;">Download All</button>
+              <button type="button" class="btn btn-pl-cancel" id="plCancelBtn" style="display:none;">Cancel</button>
+            </div>
           </div>
 
           <div class="form-group">

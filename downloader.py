@@ -478,3 +478,278 @@ def download_video(task_id: str, url: str, format: str, quality: str, custom_nam
             )
             task_manager.save_tasks()
         _emit_update(task_id)
+
+
+# ---- Playlist parsing ----
+
+def is_playlist_url(url: str) -> bool:
+    """Check if URL appears to be a playlist (has list param or playlist path)."""
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    if "list" in params:
+        return True
+    path = parsed.path.lower()
+    if "/playlist" in path or "/watchlist" in path:
+        return True
+    return False
+
+
+def parse_playlist(url: str) -> dict:
+    """
+    Parse a playlist URL and return structured info.
+    Uses yt-dlp --flat-playlist for fast enumeration (no per-video metadata).
+    Returns:
+        {
+            "is_playlist": bool,
+            "title": str,
+            "uploader": str,
+            "count": int,
+            "items": [{"id": str, "title": str, "url": str, "duration": str}],
+        }
+    """
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,  # fast, no per-video requests
+        "socket_timeout": 15,
+    }
+    if config.get_cookie_file():
+        ydl_opts["cookiefile"] = config.get_cookie_file()
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if not info:
+                return {"is_playlist": False, "title": "", "uploader": "", "count": 0, "items": []}
+
+            entries = info.get("entries") or []
+            items = []
+            for idx, entry in enumerate(entries):
+                if not entry:
+                    continue
+                entry_url = entry.get("url", "")
+                # Some entries have "webpage_url" instead
+                if not entry_url:
+                    entry_url = entry.get("webpage_url", "")
+                # Resolve relative URLs
+                if entry_url and entry_url.startswith("/"):
+                    parsed_base = urlparse(url)
+                    entry_url = f"{parsed_base.scheme}://{parsed_base.netloc}{entry_url}"
+
+                vid_id = entry.get("id", f"vid_{idx}")
+                title = entry.get("title") or entry.get("alt_title") or f"Video {idx + 1}"
+                duration = entry.get("duration")
+                duration_str = ""
+                if duration:
+                    m, s = divmod(int(duration), 60)
+                    h, m = divmod(m, 60)
+                    duration_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+                items.append({
+                    "id": vid_id,
+                    "title": title,
+                    "url": entry_url,
+                    "duration": duration_str,
+                })
+
+            return {
+                "is_playlist": True,
+                "title": info.get("title") or "Playlist",
+                "uploader": info.get("uploader") or "",
+                "count": len(items),
+                "items": items,
+            }
+    except Exception as e:
+        log.warning("Playlist parse failed for %s: %s", url, e)
+        return {"is_playlist": False, "title": "", "uploader": "", "count": 0, "items": []}
+
+
+# ---- Playlist download coordinator ----
+
+def _sync_playlist_progress(pl_task_id: str):
+    """Update a playlist task's counters from its children (called after each SubTask update)."""
+    pl = task_manager.get_task(pl_task_id)
+    if not pl or pl.task_type != "playlist":
+        return
+    children = pl.children
+    completed = sum(
+        1 for cid in children
+        if task_manager.get_task(cid) and
+        task_manager.get_task(cid).status == TaskStatus.COMPLETED
+    )
+    failed = sum(
+        1 for cid in children
+        if task_manager.get_task(cid) and
+        task_manager.get_task(cid).status == TaskStatus.ERROR
+    )
+    total = len(children)
+    done = completed + failed
+    pl.completed = completed
+    pl.failed = failed
+    pl.progress = int(done / total * 100) if total > 0 else 0
+    pl.message = f"{done}/{total}"
+    if done >= total:
+        if failed == 0:
+            pl.status = TaskStatus.COMPLETED
+            pl.message = "Done"
+        elif completed > 0:
+            pl.status = TaskStatus.ERROR
+            pl.message = f"Done ({failed} failed)"
+        else:
+            pl.status = TaskStatus.ERROR
+            pl.message = f"All {failed} failed"
+    task_manager.save_tasks()
+    _emit_update(pl_task_id)
+
+
+def _make_playlist_child_hook(pl_task_id: str, child_id: str):
+    """Make a progress_hook that also updates the parent playlist task."""
+    def hook(d):
+        child = task_manager.get_task(child_id)
+        if not child:
+            return
+        if d["status"] == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+            downloaded = d.get("downloaded_bytes", 0)
+            pct = int(downloaded / total * 100) if total > 0 else 0
+            child.update(status=TaskStatus.DOWNLOADING, progress=pct, message=f"Downloading... {pct}%")
+        elif d["status"] == "finished":
+            child.update(status=TaskStatus.PROCESSING, progress=100, message="Processing...")
+        _emit_update(child_id)
+    return hook
+
+
+def download_playlist(pl_task_id: str, url: str, format: str, quality: str, category: str = None):
+    """
+    Coordinate downloading all videos in a playlist.
+    Each video is a SubTask; progress is synced back to the playlist task.
+    """
+    pl = task_manager.get_task(pl_task_id)
+    if not pl or pl.task_type != "playlist":
+        return
+
+    children = list(pl.children)  # copy
+    total = len(children)
+    log.info("Playlist %s starting: %d videos", pl_task_id, total)
+
+    for idx, child_id in enumerate(children):
+        child = task_manager.get_task(child_id)
+        if not child:
+            continue
+
+        # Check if already done (e.g. recovered from previous session)
+        if child.status in (TaskStatus.COMPLETED, TaskStatus.ERROR):
+            _sync_playlist_progress(pl_task_id)
+            continue
+
+        video_url = child.url
+        video_format = child.format
+        video_quality = child.quality
+
+        # Build target dir: /app/music/PlaylistTitle/ or /app/video/PlaylistTitle/
+        playlist_title = pl.title or "Playlist"
+        safe_pl_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in playlist_title)
+
+        if video_format == "audio":
+            target_dir = os.path.join(config.get_music_dir(), safe_pl_title)
+            out_ext = "mp3"
+        else:
+            target_dir = os.path.join(config.get_video_dir(), safe_pl_title)
+            out_ext = "mp4"
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Get video metadata (title, uploader, thumbnail) but use child's stored title for filename
+        try:
+            info = get_video_info(video_url)
+            video_title = info.get("title", f"Video {idx + 1}")
+            uploader = info.get("uploader", "")
+            thumbnail = info.get("thumbnail", "")
+            child.update(title=video_title)
+        except Exception:
+            video_title = child.title or f"Video {idx + 1}"
+            uploader = ""
+            thumbnail = ""
+
+        safe_video_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in video_title)
+        out_path = os.path.join(target_dir, f"{safe_video_title}.{out_ext}")
+
+        if video_format == "audio":
+            outtmpl = os.path.join(target_dir, f"{safe_video_title}.%(ext)s")
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": outtmpl,
+                "quiet": True,
+                "no_warnings": True,
+                "progress_hooks": [_make_playlist_child_hook(pl_task_id, child_id)],
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }, {
+                    "key": "EmbedThumbnail",
+                }, {
+                    "key": "FFmpegMetadata",
+                    "add_metadata": True,
+                }],
+                "writethumbnail": True,
+                "merge_output_format": "mp3",
+                "getcomments": True,
+            }
+            if config.get_cookie_file():
+                ydl_opts["cookiefile"] = config.get_cookie_file()
+        else:
+            max_height = video_quality.replace("p", "") if video_quality else "1080"
+            video_fmt = f"bestvideo[height<={max_height}]+bestaudio/best"
+            outtmpl = os.path.join(target_dir, f"{safe_video_title}.%(ext)s")
+            ydl_opts = {
+                "format": video_fmt,
+                "outtmpl": outtmpl,
+                "quiet": True,
+                "no_warnings": True,
+                "socket_timeout": 30,
+                "merge_output_format": "mp4",
+                "progress_hooks": [_make_playlist_child_hook(pl_task_id, child_id)],
+            }
+            if config.get_cookie_file():
+                ydl_opts["cookiefile"] = config.get_cookie_file()
+
+        # Disk limit check
+        if config.get_disk_limit_enabled():
+            target_limit = config.get_max_music_size_gb() if video_format == "audio" else config.get_max_video_size_gb()
+            if target_limit > 0 and not _cleanup_if_needed(target_dir, target_limit):
+                child.update(status=TaskStatus.ERROR, error="Disk limit reached")
+                _sync_playlist_progress(pl_task_id)
+                _emit_update(child_id)
+                continue
+
+        child.update(status=TaskStatus.DOWNLOADING, progress=0, message="Initializing...")
+        _emit_update(child_id)
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([video_url])
+
+            # Post-download: embed metadata for audio
+            if video_format == "audio" and os.path.exists(out_path):
+                safe_display = safe_video_title.replace("_", " ").replace("-", " ").strip()
+                embed_mp3_metadata(out_path, title=safe_display, artist=uploader, thumbnail_url=thumbnail)
+
+            size_mb = os.path.getsize(out_path) / (1024 * 1024) if os.path.exists(out_path) else 0
+            child.update(
+                status=TaskStatus.COMPLETED,
+                progress=100,
+                message="Download complete",
+                filename=out_path,
+            )
+            log.info("Playlist child %s done: %s", child_id, video_title)
+            task_manager.record_completed(child_id)
+        except Exception as e:
+            log.error("Playlist child %s failed: %s", child_id, e)
+            child.update(
+                status=TaskStatus.ERROR,
+                progress=0,
+                message="Download failed",
+                error=str(e),
+            )
+        _sync_playlist_progress(pl_task_id)
+        _emit_update(child_id)

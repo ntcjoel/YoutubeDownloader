@@ -9,7 +9,7 @@ import threading
 
 from flask import Flask, render_template, jsonify, request, make_response
 from flask_socketio import SocketIO, emit
-from tasks import task_manager
+from tasks import task_manager, TaskStatus
 import downloader
 import config
 from app_logging import get_logger
@@ -383,6 +383,165 @@ def api_download():
     log.info("API download started: task=%s url=%s format=%s quality=%s category=%s",
              task.id, url, fmt, quality, category)
     return _cors_json({"ok": True, "task_id": task.id, "task": task.to_dict()})
+
+
+
+
+@app.route("/api/parse", methods=["GET"])
+def api_parse():
+    """
+    Parse a URL: return title, qualities, and is_playlist flag with video list if applicable.
+    Query param: url
+    """
+    url = request.args.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "url is required"}), 400
+
+    try:
+        info = downloader.get_video_info(url)
+        result = {
+            "title": info.get("title", "video"),
+            "qualities": info.get("qualities", []),
+        }
+    except Exception as e:
+        result = {"title": None, "qualities": [], "error": str(e)}
+
+    # Also check if this is a playlist
+    if downloader.is_playlist_url(url):
+        try:
+            pl_info = downloader.parse_playlist(url)
+            if pl_info.get("is_playlist") and pl_info.get("count", 0) >= 3:
+                result["is_playlist"] = True
+                result["playlist_title"] = pl_info["title"]
+                result["playlist_uploader"] = pl_info["uploader"]
+                result["playlist_count"] = pl_info["count"]
+                result["playlist_items"] = pl_info["items"]
+            else:
+                result["is_playlist"] = False
+        except Exception as e:
+            result["is_playlist"] = False
+            log.warning("Playlist detect failed: %s", e)
+    else:
+        result["is_playlist"] = False
+
+    return jsonify(result)
+
+
+@app.route("/api/playlist/download", methods=["POST"])
+def api_playlist_download():
+    """
+    Create a playlist download task.
+    Body: {
+        "url": "...",
+        "format": "audio" | "video",
+        "quality": "1080p" | "720p" | etc,
+        "category": "..." (optional)
+    }
+    Returns: { "ok": true, "task_id": "...", "task": {...}, "children": [...] }
+    """
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    url = (data.get("url") or "").strip()
+    fmt = (data.get("format") or "video").strip().lower()
+    quality = (data.get("quality") or "1080p").strip()
+    category = (data.get("category") or "").strip() or None
+
+    if not url:
+        return jsonify({"error": "url is required"}), 400
+    if fmt not in ("video", "audio"):
+        return jsonify({"error": "format must be 'video' or 'audio'"}), 400
+
+    # Parse playlist to get video list
+    pl_info = downloader.parse_playlist(url)
+    if not pl_info.get("is_playlist") or not pl_info.get("items"):
+        return jsonify({"error": "URL is not a valid playlist"}), 400
+
+    items = pl_info["items"]
+    pl_title = pl_info.get("title") or "Playlist"
+
+    # Create SubTasks first
+    child_ids = []
+    for item in items:
+        child_task = task_manager.create_task(
+            url=item["url"],
+            format=fmt,
+            quality=quality if fmt == "video" else "",
+            title=item["title"],
+            category=category,
+        )
+        child_task.task_type = "single"
+        child_task.parent_id = None  # will be set below
+        child_ids.append(child_task.id)
+
+    # Create playlist task (this also saves it)
+    pl_task = task_manager.create_playlist_task(
+        url=url,
+        format=fmt,
+        quality=quality,
+        title=pl_title,
+        children_ids=child_ids,
+        category=category,
+    )
+
+    # Update each child with parent_id
+    for cid in child_ids:
+        child = task_manager.get_task(cid)
+        if child:
+            child.parent_id = pl_task.id
+            task_manager.add_child_task(child)
+
+    # Save after updating parent_ids
+    task_manager.save_tasks()
+
+    # Start download coordinator in background thread
+    t = threading.Thread(
+        target=downloader.download_playlist,
+        args=(pl_task.id, url, fmt, quality, category),
+        daemon=True,
+    )
+    t.start()
+
+    log.info("Playlist download started: task=%s url=%s count=%d", pl_task.id, url, len(child_ids))
+    return jsonify({
+        "ok": True,
+        "task_id": pl_task.id,
+        "task": pl_task.to_dict(),
+        "children": [task_manager.get_task(cid).to_dict() for cid in child_ids],
+    })
+
+
+@app.route("/api/playlist/cancel", methods=["POST"])
+def api_playlist_cancel():
+    """
+    Cancel a playlist download and all its pending children.
+    Body: { "task_id": "..." }
+    """
+    data = request.get_json()
+    task_id = (data.get("task_id") or "").strip()
+    if not task_id:
+        return jsonify({"error": "task_id is required"}), 400
+
+    pl = task_manager.get_task(task_id)
+    if not pl or pl.task_type != "playlist":
+        return jsonify({"error": "Task not found or not a playlist"}), 404
+
+    pl.status = TaskStatus.CANCELLED
+    pl.message = "Cancelled"
+    task_manager.save_tasks()
+
+    # Remove all children from queue (they are still in _tasks dict for history)
+    for cid in pl.children:
+        child = task_manager.get_task(cid)
+        if child and child.status == TaskStatus.PENDING:
+            child.status = TaskStatus.CANCELLED
+            child.message = "Cancelled"
+    task_manager.save_tasks()
+
+    log.info("Playlist cancelled: task=%s", task_id)
+    return jsonify({"ok": True})
+
 
 
 def _cors_json(data, status=200):

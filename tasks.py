@@ -18,12 +18,18 @@ _DATA_DIR = os.path.join(os.path.dirname(__file__), "logs")  # only dir 1000:100
 _TASKS_LOCK_FILE = os.path.join(_DATA_DIR, "tasks_state.json.lock")
 
 
+class TaskType(str, Enum):
+    SINGLE = "single"
+    PLAYLIST = "playlist"
+
+
 class TaskStatus(str, Enum):
     PENDING = "pending"
     DOWNLOADING = "downloading"
     PROCESSING = "processing"
     COMPLETED = "completed"
     ERROR = "error"
+    CANCELLED = "cancelled"
 
 
 class Task:
@@ -41,6 +47,13 @@ class Task:
         self.error: Optional[str] = None
         self.created_at = datetime.now().strftime("%H:%M:%S")
         self.updated_at = datetime.now().strftime("%H:%M:%S")
+        # Playlist fields
+        self.task_type: str = "single"
+        self.parent_id: Optional[str] = None
+        self.total: int = 0
+        self.completed: int = 0
+        self.failed: int = 0
+        self.children: list[str] = []
 
     def to_dict(self):
         return {
@@ -57,6 +70,12 @@ class Task:
             "error": self.error,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "task_type": self.task_type,
+            "parent_id": self.parent_id,
+            "total": self.total,
+            "completed": self.completed,
+            "failed": self.failed,
+            "children": self.children,
         }
 
     @classmethod
@@ -76,6 +95,12 @@ class Task:
         t.error = d.get("error")
         t.created_at = d.get("created_at", datetime.now().strftime("%H:%M:%S"))
         t.updated_at = d.get("updated_at", datetime.now().strftime("%H:%M:%S"))
+        t.task_type = d.get("task_type", "single")
+        t.parent_id = d.get("parent_id")
+        t.total = d.get("total", 0)
+        t.completed = d.get("completed", 0)
+        t.failed = d.get("failed", 0)
+        t.children = d.get("children", [])
         return t
 
     def update(self, status: Optional[TaskStatus] = None,
@@ -110,7 +135,7 @@ class TaskManager:
         self._load_tasks()
 
     def _load_tasks(self):
-        """Restore task states on startup. Incomplete tasks are marked as error."""
+        """Restore task states on startup."""
         if not os.path.exists(_TASKS_STATE_FILE):
             return
         try:
@@ -129,25 +154,40 @@ class TaskManager:
         except Exception as e:
             log.warning("Failed to load task state: %s", e)
             return
+
         recovered = 0
         for d in data:
-            # Skip completed tasks
-            if d.get("status") == "completed":
-                continue
-            # Mark incomplete tasks as error (interrupted)
-            if d.get("status") in ("downloading", "processing", "pending"):
-                d["status"] = "error"
-                d["error"] = d.get("error") or "Interrupted by server restart"
-                d["message"] = "Interrupted"
             task = Task.from_dict(d)
             self._tasks[task.id] = task
-            self._processing_queue.append(task.id)
-            recovered += 1
+
+            if task.task_type == "playlist":
+                # Playlists: keep if downloading, mark error if pending/processing
+                if task.status in (TaskStatus.DOWNLOADING, TaskStatus.PENDING):
+                    self._processing_queue.append(task.id)
+                    recovered += 1
+                elif task.status == TaskStatus.PROCESSING:
+                    task.status = TaskStatus.ERROR
+                    task.message = "Interrupted"
+                    task.error = "Interrupted by server restart"
+                    self._processing_queue.append(task.id)
+                    recovered += 1
+                # completed/error/cancelled playlists - keep but don't re-queue
+            else:
+                # Single tasks
+                if task.status == TaskStatus.COMPLETED:
+                    continue  # skip
+                if task.status in (TaskStatus.DOWNLOADING, TaskStatus.PROCESSING, TaskStatus.PENDING):
+                    task.status = TaskStatus.ERROR
+                    task.error = "Interrupted by server restart"
+                    task.message = "Interrupted"
+                self._processing_queue.append(task.id)
+                recovered += 1
+
         if recovered:
             log.info("Recovered %d task(s) from previous session", recovered)
 
     def _save_tasks(self):
-        """Persist all task states to disk with file locking for thread safety."""
+        """Persist all task states to disk with file locking."""
         try:
             lock_fd = open(_TASKS_LOCK_FILE, "w")
             fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
@@ -167,10 +207,63 @@ class TaskManager:
     def create_task(self, url: str, format: str, quality: str = "1080p", category: str = None) -> Task:
         with self._lock:
             task = Task(url, format, quality, category=category)
+            task.task_type = "single"
             self._tasks[task.id] = task
             self._processing_queue.append(task.id)
             self._save_tasks()
             return task
+
+    def create_playlist_task(self, url: str, format: str, quality: str, title: str,
+                            children_ids: list[str], category: str = None) -> Task:
+        """Create a playlist task with pre-created child IDs."""
+        with self._lock:
+            task = Task(url, format, quality, title=title, category=category)
+            task.task_type = "playlist"
+            task.status = TaskStatus.DOWNLOADING
+            task.children = children_ids
+            task.total = len(children_ids)
+            task.completed = 0
+            task.failed = 0
+            self._tasks[task.id] = task
+            self._processing_queue.append(task.id)
+            self._save_tasks()
+            return task
+
+    def add_child_task(self, child_task: Task):
+        """Register a video sub-task."""
+        with self._lock:
+            self._tasks[child_task.id] = child_task
+
+    def on_child_done(self, child_id: str, child_status: TaskStatus):
+        """Called when a SubTask finishes — update playlist counters and status."""
+        with self._lock:
+            child = self._tasks.get(child_id)
+            if not child or not child.parent_id:
+                return
+            parent = self._tasks.get(child.parent_id)
+            if not parent or parent.task_type != "playlist":
+                return
+
+            if child_status == TaskStatus.COMPLETED:
+                parent.completed += 1
+            elif child_status in (TaskStatus.ERROR, TaskStatus.CANCELLED):
+                parent.failed += 1
+
+            total_done = parent.completed + parent.failed
+            parent.progress = int(total_done / parent.total * 100) if parent.total > 0 else 0
+            parent.message = f"{total_done}/{parent.total}"
+
+            if total_done >= parent.total:
+                if parent.failed == 0:
+                    parent.status = TaskStatus.COMPLETED
+                    parent.message = "Done"
+                elif parent.completed > 0:
+                    parent.status = TaskStatus.ERROR
+                    parent.message = f"Done ({parent.failed} failed)"
+                else:
+                    parent.status = TaskStatus.ERROR
+                    parent.message = f"All {parent.failed} failed"
+            self._save_tasks()
 
     def get_task(self, task_id: str) -> Optional[Task]:
         return self._tasks.get(task_id)
@@ -204,6 +297,16 @@ class TaskManager:
 
     def remove_task(self, task_id: str):
         with self._lock:
+            task = self._tasks.get(task_id)
+            if not task:
+                return
+            # Cascade delete for playlist
+            if task.task_type == "playlist":
+                for cid in task.children:
+                    if cid in self._tasks:
+                        del self._tasks[cid]
+                    if cid in self._processing_queue:
+                        self._processing_queue.remove(cid)
             if task_id in self._tasks:
                 del self._tasks[task_id]
             if task_id in self._processing_queue:
@@ -215,9 +318,16 @@ class TaskManager:
     def clear_completed(self):
         """Remove all completed and error tasks"""
         with self._lock:
-            completed = [tid for tid, t in self._tasks.items()
-                         if t.status in (TaskStatus.COMPLETED, TaskStatus.ERROR)]
-            for tid in completed:
+            to_remove = []
+            for tid, t in self._tasks.items():
+                if t.task_type == "playlist":
+                    if t.status not in (TaskStatus.COMPLETED, TaskStatus.ERROR, TaskStatus.CANCELLED):
+                        continue
+                else:
+                    if t.status not in (TaskStatus.COMPLETED, TaskStatus.ERROR):
+                        continue
+                to_remove.append(tid)
+            for tid in to_remove:
                 del self._tasks[tid]
                 if tid in self._processing_queue:
                     self._processing_queue.remove(tid)
@@ -240,7 +350,6 @@ class TaskManager:
                 "created_at": task.created_at,
                 "completed_at": task.updated_at,
             })
-            # Keep max 200 entries
             if len(self._history) > 200:
                 self._history = self._history[:200]
 

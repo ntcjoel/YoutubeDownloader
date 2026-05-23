@@ -86,26 +86,55 @@ let titleFetchTimer = null;
 let logPage = 1;
 let _historyPageSize = 20;
 
-// ---- Title preview on URL input ----
+// ---- Title preview + playlist detection on URL input ----
+let _pendingPlaylist = null;  // { url, items, title, count }
+
+function hidePlaylistBanner() {
+  const banner = document.getElementById("playlistBanner");
+  if (banner) banner.classList.remove("show");
+  _pendingPlaylist = null;
+}
+
+function showPlaylistBanner(items, title, count) {
+  const banner = document.getElementById("playlistBanner");
+  if (!banner) return;
+  document.getElementById("plTitle").textContent = title || "Playlist";
+  document.getElementById("plCount").textContent = count;
+  document.getElementById("plSpinner").style.display = "none";
+  document.getElementById("plDownloadBtn").style.display = "";
+  document.getElementById("plCancelBtn").style.display = "";
+  banner.classList.add("show");
+  _pendingPlaylist = { items, title, count };
+}
+
 async function fetchTitle(url) {
   if (!url || !url.includes("youtube.com") && !url.includes("youtu.be") && !url.includes("bilibili.com") && !url.includes("tiktok.com")) {
     document.getElementById("titlePreview").textContent = "";
+    hidePlaylistBanner();
     return;
   }
+  // Hide playlist banner while fetching
+  hidePlaylistBanner();
   const el = document.getElementById("titlePreview");
   el.innerHTML = '<span class="spinner"></span>Fetching title......';
   el.className = "loading";
   try {
-    const resp = await fetch("/title?url=" + encodeURIComponent(url));
+    // Use /api/parse which returns both title and is_playlist info
+    const resp = await fetch("/api/parse?url=" + encodeURIComponent(url));
     const data = await resp.json();
+    if (data.error && !data.title) {
+      el.textContent = "Cannot fetch title...";
+      el.className = "error";
+      return;
+    }
     if (data.title) {
       el.textContent = data.title;
       el.className = "";
-      // Dynamically populate quality dropdown based on available video qualities
       populateQualityDropdown(data.qualities || []);
-    } else {
-      el.textContent = "Cannot fetch title...";
-      el.className = "error";
+    }
+    // Show playlist banner if detected
+    if (data.is_playlist && data.playlist_items && data.playlist_items.length >= 3) {
+      showPlaylistBanner(data.playlist_items, data.playlist_title, data.playlist_count);
     }
   } catch (e) {
     el.textContent = "Failed to fetch title";
@@ -138,6 +167,8 @@ document.getElementById("urlInput").addEventListener("input", (e) => {
 });
 
 // ---- Task rendering ----
+let _collapsedPlaylists = {};  // task_id -> true if collapsed
+
 function renderTasks() {
   const list = document.getElementById("taskList");
   const arr = Object.values(tasks);
@@ -154,80 +185,187 @@ function renderTasks() {
 
   arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-  list.innerHTML = arr.map(t => {
-    const badge = {
-      pending: "Pending",
-      downloading: "Downloading",
-      processing: "Processing",
-      completed: "Completed",
-      error: "Error",
-    }[t.status] || t.status;
+  // Separate playlist tasks from regular tasks
+  const plTasks = arr.filter(t => t.task_type === 'playlist');
+  const singleTasks = arr.filter(t => t.task_type !== 'playlist');
 
-    const cls = {
-      pending: "badge-pending",
-      downloading: "badge-downloading",
-      processing: "badge-processing",
-      completed: "badge-completed",
-      error: "badge-error",
-    }[t.status] || "badge-pending";
-
-    const msg = t.error
-      ? `<span class="task-error">${t.error}</span>`
-      : `<span>${t.message || ""}</span><span>${t.progress !== undefined ? t.progress + "%" : ""}</span>`;
-
-    const filenameHtml2 = showFilename && t.filename
-      ? `<div class="task-filename">&#128193; ${t.filename}</div>`
-      : '';
-
-    const qualityBadge = showQuality && t.quality
-      ? `<span class="log-badge" style="font-size:0.65rem;padding:2px 6px;border-radius:10px;background:#1a2a3a;color:#4488ff;margin-left:6px;">${t.quality}</span>`
-      : '';
-
-    const categoryBadge = t.category
-      ? `<span class="log-badge" style="font-size:0.65rem;padding:2px 6px;border-radius:10px;background:#2a1a3a;color:#aa66cc;margin-left:4px;">${t.category}</span>`
-      : '';
-
-    const hasFile = t.status === 'completed' && t.filename;
-
-    const menuId = `task-menu-${t.id}`;
-    const titleId = `task-title-${t.id}`;
-
-    return `
-      <div class="task" data-id="${t.id}">
-        <div class="task-header">
-          <div class="task-title" id="${titleId}" style="flex:1;min-width:0;">${t.title || t.url || "Unknown"}${qualityBadge}${categoryBadge}</div>
-          ${(t.format === 'audio' && t.filename && t.status === 'completed')
-            ? `<button class="btn-edit" onclick="openMetaModal('${t.filename.replace(/'/g, "\\'")}')">Edit Metadata</button>`
-            : ''}
-          <span class="task-badge ${cls}">${badge}</span>
-          <div class="context-menu">
-            <button class="task-menu-btn" onclick="toggleTaskMenu('${menuId}')" title="More actions">&#8942;</button>
-            <div class="context-menu-dropdown" id="${menuId}">
-              ${t.status === 'error' ? `<button class="context-menu-item" onclick="redownloadTask('${t.id}')">Redownload</button>` : ''}
-              ${t.status === 'error' && hasFile ? `<div class="context-menu-divider"></div>` : ''}
-              ${hasFile ? `<button class="context-menu-item" onclick="openMoveModal(['${t.filename.replace(/'/g, "\\'")}'])">Move</button>` : ''}
-              ${hasFile ? `<button class="context-menu-item" onclick="openSingleRename('${t.id}', '${t.filename.replace(/'/g, "\\'")}')">Rename</button>` : ''}
-              ${hasFile ? `<div class="context-menu-divider"></div>` : ''}
-              <button class="context-menu-item danger" onclick="deleteTask('${t.id}')">Delete</button>
-            </div>
-          </div>
-        </div>
-        ${showUrl ? `<div class="task-url-row">
-          <span class="task-url-label">URL</span>
-          <a class="task-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>
-        </div>` : ''}
-        ${filenameHtml2}
-        <div class="progress-wrap">
-          <div class="progress-bar" style="width:${t.progress || 0}%"></div>
-        </div>
-        <div class="task-message">${msg}</div>
-      </div>
-    `;
-  }).join("");
+  list.innerHTML = plTasks.map(pl => renderPlaylistTask(pl, showUrl, showFilename, showQuality)).join('')
+    + singleTasks.map(t => renderSingleTask(t, showUrl, showFilename, showQuality)).join('');
 
   // Close menus when clicking outside
   document.addEventListener('click', closeAllTaskMenus, { once: true });
 }
+
+function renderPlaylistTask(pl, showUrl, showFilename, showQuality) {
+  const collapsed = _collapsedPlaylists[pl.id];
+  const badge = {
+    downloading: "Downloading",
+    processing: "Processing",
+    completed: "Completed",
+    error: "Partially Failed",
+    cancelled: "Cancelled",
+    pending: "Pending",
+  }[pl.status] || pl.status;
+
+  const cls = {
+    downloading: "badge-downloading",
+    processing: "badge-processing",
+    completed: "badge-completed",
+    error: "badge-error",
+    cancelled: "badge-pending",
+    pending: "badge-pending",
+  }[pl.status] || "badge-pending";
+
+  const total = pl.total || 0;
+  const done = (pl.completed || 0) + (pl.failed || 0);
+  const failed = pl.failed || 0;
+
+  const menuId = `task-menu-${pl.id}`;
+  const plTitle = pl.title || "Playlist";
+  const plBadge = pl.format === 'audio' ? 'MP3' : 'MP4';
+
+  let childHtml = '';
+  if (!collapsed) {
+    const children = (pl.children || [])
+      .map(cid => tasks[cid])
+      .filter(c => c);
+
+    childHtml = children.map(c => {
+      const doneCls = c.status === 'completed' ? 'done'
+        : c.status === 'error' ? 'err'
+        : c.status === 'downloading' ? 'downloading'
+        : 'pending';
+      const statusText = c.status === 'completed' ? 'Done'
+        : c.status === 'error' ? 'Failed'
+        : c.status === 'downloading' ? `${c.progress || 0}%`
+        : c.status === 'processing' ? 'Processing'
+        : 'Pending';
+      return `
+        <div class="task-child">
+          <span class="tc-status ${doneCls}">${statusText}</span>
+          <span class="tc-title" title="${escapeHtml(c.title || c.url || '')}">${escapeHtml(c.title || c.url || 'Unknown')}</span>
+          ${c.status === 'downloading' ? `<div class="progress-mini"><div class="progress-mini-fill" style="width:${c.progress || 0}%"></div></div>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  return `
+    <div class="task" data-id="${pl.id}">
+      <div class="task-header">
+        <span class="collapse-btn" onclick="togglePlaylistCollapse(\'${pl.id}\')" title="${collapsed ? 'Expand' : 'Collapse'}">
+          ${collapsed ? '&#9658;' : '&#9660;'}
+        </span>
+        <div class="task-title" style="flex:1;min-width:0;">
+          ${escapeHtml(plTitle)}
+          <span class="log-badge" style="font-size:0.65rem;padding:2px 6px;border-radius:10px;background:#1a2a3a;color:#f0a040;margin-left:6px;">${plBadge}</span>
+          <span class="log-badge" style="font-size:0.65rem;padding:2px 6px;border-radius:10px;background:#1a2a3a;color:#aaa;margin-left:4px;">${total} videos</span>
+        </div>
+        <span class="task-badge ${cls}">${badge}${pl.status === 'downloading' && total > 0 ? ` ${done}/${total}` : ''}</span>
+        <div class="context-menu">
+          <button class="task-menu-btn" onclick="toggleTaskMenu(\'${menuId}\')" title="More actions">&#8942;</button>
+          <div class="context-menu-dropdown" id="${menuId}">
+            ${pl.status === 'downloading' ? `<button class="context-menu-item danger" onclick="cancelPlaylist(\'${pl.id}\')">Cancel</button>` : ''}
+            <button class="context-menu-item danger" onclick="deleteTask(\'${pl.id}\')">Delete</button>
+          </div>
+        </div>
+      </div>
+      ${pl.status === 'downloading' ? `<div class="progress-wrap"><div class="progress-bar" style="width:${pl.progress || 0}%"></div></div>` : ''}
+      ${pl.message ? `<div class="task-message">${pl.message}</div>` : ''}
+      ${childHtml ? `<div class="task-children">${childHtml}</div>` : ''}
+    </div>
+  `;
+}
+
+function togglePlaylistCollapse(taskId) {
+  if (_collapsedPlaylists[taskId]) {
+    delete _collapsedPlaylists[taskId];
+  } else {
+    _collapsedPlaylists[taskId] = true;
+  }
+  renderTasks();
+}
+
+async function cancelPlaylist(taskId) {
+  if (!confirm('Cancel this playlist download?')) return;
+  await fetch("/api/playlist/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_id: taskId }),
+  });
+  socket.emit("request_tasks");
+}
+
+function renderSingleTask(t, showUrl, showFilename, showQuality) {
+  const badge = {
+    pending: "Pending",
+    downloading: "Downloading",
+    processing: "Processing",
+    completed: "Completed",
+    error: "Error",
+  }[t.status] || t.status;
+
+  const cls = {
+    pending: "badge-pending",
+    downloading: "badge-downloading",
+    processing: "badge-processing",
+    completed: "badge-completed",
+    error: "badge-error",
+  }[t.status] || "badge-pending";
+
+  const msg = t.error
+    ? `<span class="task-error">${t.error}</span>`
+    : `<span>${t.message || ""}</span><span>${t.progress !== undefined ? t.progress + "%" : ""}</span>`;
+
+  const filenameHtml2 = showFilename && t.filename
+    ? `<div class="task-filename">&#128193; ${t.filename}</div>`
+    : '';
+
+  const qualityBadge = showQuality && t.quality
+    ? `<span class="log-badge" style="font-size:0.65rem;padding:2px 6px;border-radius:10px;background:#1a2a3a;color:#4488ff;margin-left:6px;">${t.quality}</span>`
+    : '';
+
+  const categoryBadge = t.category
+    ? `<span class="log-badge" style="font-size:0.65rem;padding:2px 6px;border-radius:10px;background:#2a1a3a;color:#aa66cc;margin-left:4px;">${t.category}</span>`
+    : '';
+
+  const hasFile = t.status === 'completed' && t.filename;
+
+  const menuId = `task-menu-${t.id}`;
+  const titleId = `task-title-${t.id}`;
+
+  return `
+    <div class="task" data-id="${t.id}">
+      <div class="task-header">
+        <div class="task-title" id="${titleId}" style="flex:1;min-width:0;">${t.title || t.url || "Unknown"}${qualityBadge}${categoryBadge}</div>
+        ${(t.format === 'audio' && t.filename && t.status === 'completed')
+          ? `<button class="btn-edit" onclick="openMetaModal(\'${t.filename.replace(/'/g, "\\'")}\')">Edit Metadata</button>`
+          : ''}
+        <span class="task-badge ${cls}">${badge}</span>
+        <div class="context-menu">
+          <button class="task-menu-btn" onclick="toggleTaskMenu(\'${menuId}\')" title="More actions">&#8942;</button>
+          <div class="context-menu-dropdown" id="${menuId}">
+            ${t.status === 'error' ? `<button class="context-menu-item" onclick="redownloadTask(\'${t.id}\')">Redownload</button>` : ''}
+            ${t.status === 'error' && hasFile ? `<div class="context-menu-divider"></div>` : ''}
+            ${hasFile ? `<button class="context-menu-item" onclick="openMoveModal([\'${t.filename.replace(/'/g, "\\'")}\'])">Move</button>` : ''}
+            ${hasFile ? `<button class="context-menu-item" onclick="openSingleRename(\'${t.id}\', \'${t.filename.replace(/'/g, "\\'")}\')">Rename</button>` : ''}
+            ${hasFile ? `<div class="context-menu-divider"></div>` : ''}
+            <button class="context-menu-item danger" onclick="deleteTask(\'${t.id}\')">Delete</button>
+          </div>
+        </div>
+      </div>
+      ${showUrl ? `<div class="task-url-row">
+        <span class="task-url-label">URL</span>
+        <a class="task-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>
+      </div>` : ''}
+      ${filenameHtml2}
+      ${t.status !== 'completed' && t.status !== 'error' && t.status !== 'pending' ? `<div class="progress-wrap"><div class="progress-bar" style="width:${t.progress || 0}%"></div></div>` : ''}
+      <div class="task-message">${msg}</div>
+    </div>
+  `;
+}
+
+
 
 // ---- WebSocket event handlers ----
 if (socket) {
@@ -272,6 +410,38 @@ document.getElementById("downloadForm").addEventListener("submit", async (e) => 
   document.getElementById("submitBtn").textContent = "Submitting......";
 
   try {
+    // If a playlist is pending, use playlist download API instead
+    if (_pendingPlaylist) {
+      const plData = {
+        url,
+        format,
+        quality: format === "audio" ? "" : quality,
+        category: category || null,
+      };
+      const res = await fetch("/api/playlist/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(plData),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert("Error: " + (data.error || "UnknownError"));
+      } else if (data.task) {
+        tasks[data.task.id] = data.task;
+        // Add children as tasks too
+        for (const child of (data.children || [])) {
+          tasks[child.id] = child;
+        }
+        renderTasks();
+        hidePlaylistBanner();
+        document.getElementById("urlInput").value = "";
+        document.getElementById("titlePreview").textContent = "";
+      }
+      document.getElementById("submitBtn").disabled = false;
+      document.getElementById("submitBtn").textContent = "Download";
+      return;
+    }
+
     const res = await fetch("/download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -305,6 +475,49 @@ document.getElementById("pasteBtn").addEventListener("click", async () => {
     // Clipboard API not available (e.g. http context) — silently ignore
   }
 });
+// ---- Playlist banner buttons ----
+document.getElementById("plDownloadBtn")?.addEventListener("click", async () => {
+  const url = document.getElementById("urlInput").value.trim();
+  const format = document.getElementById("formatSelect").value;
+  const quality = document.getElementById("qualitySelect").value;
+  if (!_pendingPlaylist || !url) return;
+  document.getElementById("plDownloadBtn").disabled = true;
+  document.getElementById("plDownloadBtn").textContent = "Starting...";
+  try {
+    const res = await fetch("/api/playlist/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, format, quality: format === "audio" ? "" : quality, category: "" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert("Error: " + (data.error || "UnknownError"));
+      document.getElementById("plDownloadBtn").disabled = false;
+      document.getElementById("plDownloadBtn").textContent = "Download All";
+    } else if (data.task) {
+      tasks[data.task.id] = data.task;
+      for (const child of (data.children || [])) {
+        tasks[child.id] = child;
+      }
+      renderTasks();
+      hidePlaylistBanner();
+      document.getElementById("urlInput").value = "";
+      document.getElementById("titlePreview").textContent = "";
+    }
+  } catch (err) {
+    alert("Request failed: " + err.message);
+    document.getElementById("plDownloadBtn").disabled = false;
+    document.getElementById("plDownloadBtn").textContent = "Download All";
+  }
+});
+
+document.getElementById("plCancelBtn")?.addEventListener("click", () => {
+  hidePlaylistBanner();
+  document.getElementById("urlInput").value = "";
+  document.getElementById("titlePreview").textContent = "";
+});
+
+
 
 // ---- Clear URL input ----
 document.getElementById("urlClearBtn").addEventListener("click", () => {
