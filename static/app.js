@@ -106,6 +106,7 @@ function showPlaylistBanner(items, title, count) {
   document.getElementById("plTitle").textContent = title || "Playlist";
   document.getElementById("plCount").textContent = count;
   document.getElementById("plSpinner").style.display = "none";
+  document.getElementById("plMeta").style.display = "";
   document.getElementById("plDownloadBtn").style.display = "";
   document.getElementById("plCancelBtn").style.display = "";
   banner.classList.add("show");
