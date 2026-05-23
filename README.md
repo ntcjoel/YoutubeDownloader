@@ -52,7 +52,13 @@ app_logging/
 git clone https://github.com/ntcjoel/YoutubeDownloader.git
 cd YoutubeDownloader
 
-# Edit config.yaml to set your video/music directories
+# Prepare local directories (logs must be owned by uid 1000 for container write access)
+mkdir -p logs cookies data
+sudo chown -R 1000:1000 logs cookies data
+
+# Edit config.yaml — paths are CONTAINER-INTERNAL (not host paths)
+# video_dir: "/app/video"    → host /mnt/nfs/pt/ytb_video
+# music_dir: "/app/music"    → host /mnt/nfs/pt/ytb_music
 vim config.yaml
 
 # Build and start
@@ -61,6 +67,8 @@ docker compose up -d --build
 # View logs
 docker compose logs -f
 ```
+
+> **Why `user: "1000:1000"`?** The container runs as host user 1000 to avoid NFS root_squash permission errors. Ensure host NFS dirs (`/mnt/nfs/pt/ytb_video`, `/mnt/nfs/pt/ytb_music`) are owned by uid 1000.
 
 Access at `http://<your-server>:1917`
 
