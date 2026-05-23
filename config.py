@@ -163,12 +163,15 @@ _SITE_COOKIE_PATHS = {
 def get_cookie_file() -> str:
     """
     Resolve the actual cookie file path based on the selected site.
-    Returns empty string if no site is selected or file does not exist.
+    Returns empty string if no site is selected or file does not exist / is empty.
     """
     site = get_cookie_site()
     if not site or site == "none":
         return ""
-    return _SITE_COOKIE_PATHS.get(site, "")
+    path = _SITE_COOKIE_PATHS.get(site, "")
+    if path and os.path.exists(path) and os.path.getsize(path) > 0:
+        return path
+    return ""
 
 
 
