@@ -109,6 +109,7 @@ function showPlaylistBanner(items, title, count) {
   document.getElementById("plMeta").style.display = "";
   document.getElementById("plDownloadBtn").style.display = "";
   document.getElementById("plCancelBtn").style.display = "";
+  document.getElementById("plIcon").style.display = "";
   banner.classList.add("show");
   _pendingPlaylist = { items, title, count };
 }
