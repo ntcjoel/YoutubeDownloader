@@ -56,7 +56,7 @@ def log_download(
 def read_downloads(limit: int = 100, offset: int = 0) -> list:
     """
     Read the last `limit` records from downloads.log.
-    Returns list of dicts, newest last.
+    Returns list of dicts, newest first.
     """
     path = get_log_path()
     if not os.path.exists(path):
@@ -72,11 +72,11 @@ def read_downloads(limit: int = 100, offset: int = 0) -> list:
                 except json.JSONDecodeError:
                     pass
 
-    # Return paginated slice from newest, reversed so newest comes first
+    # Reverse so newest records come first, then paginate
     records_rev = list(reversed(records))
-    start = offset
-    end = offset + limit
-    return records_rev[start:end]
+    if offset >= len(records_rev):
+        return []
+    return records_rev[offset:offset + limit]
 
 
 def count_downloads() -> int:

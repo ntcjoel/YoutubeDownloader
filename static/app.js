@@ -1,6 +1,21 @@
-document.addEventListener("DOMContentLoaded", () => {
+// ---- Eagerly load categories on startup so the dropdown is populated from page load ----
+async function initCategories() {
+  try {
+    const res = await fetch('/api/categories');
+    if (res.ok) {
+      _categories = await res.json();
+      populateCategorySelect();
+    }
+  } catch (e) {
+    console.error('Failed to load categories:', e);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("urlInput").value = "";
   hidePlaylistBanner();
+  // Load categories immediately so the task-form dropdown is populated from the start
+  await initCategories();
 });
 // ---- WebSocket connection ----
 const statusDot = document.getElementById("statusDot");
@@ -355,7 +370,7 @@ function renderSingleTask(t, showUrl, showFilename, showQuality) {
           <div class="context-menu-dropdown" id="${menuId}">
             ${t.status === 'error' ? `<button class="context-menu-item" onclick="redownloadTask(\'${t.id}\')">Redownload</button>` : ''}
             ${t.status === 'error' && hasFile ? `<div class="context-menu-divider"></div>` : ''}
-            ${hasFile ? `<button class="context-menu-item" onclick="openMoveModal([\'${t.filename.replace(/'/g, "\\'")}\'])">Move</button>` : ''}
+            ${hasFile ? `<button class="context-menu-item" onclick="openMoveModal('${t.id}', '${t.filename.replace(/'/g, "\\'")}')">Move</button>` : ''}
             ${hasFile ? `<button class="context-menu-item" onclick="openSingleRename(\'${t.id}\', \'${t.filename.replace(/'/g, "\\'")}\')">Rename</button>` : ''}
             ${hasFile ? `<div class="context-menu-divider"></div>` : ''}
             <button class="context-menu-item danger" onclick="deleteTask(\'${t.id}\')">Delete</button>
@@ -578,7 +593,7 @@ async function loadHistory(page) {
             <div class="context-menu">
               <button class="log-menu-btn" onclick="toggleTaskMenu('${menuId}')" title="More actions">&#8942;</button>
               <div class="context-menu-dropdown" id="${menuId}">
-                ${hasFile ? `<button class="context-menu-item" onclick="openMoveModal(['${(item.filename || '').replace(/'/g, "\\'")}'])">Move</button>` : ''}
+                ${hasFile ? `<button class="context-menu-item" onclick="openMoveModal('${item.ts}', '${(item.filename || '').replace(/'/g, "\\'")}')">Move</button>` : ''}
                 ${hasFile ? `<button class="context-menu-item" onclick="openHistoryRename('${item.ts}', '${(item.filename || '').replace(/'/g, "\\'")}')">Rename</button>` : ''}
                 <div class="context-menu-divider"></div>
                 <button class="context-menu-item danger" onclick="deleteHistoryRecord('${item.ts || ''}', false)">Delete record</button>
@@ -1163,9 +1178,10 @@ function openHistoryRename(ts, filename) {
 
 // ---- Move modal ----
 let _moveFilenames = null;
+  _moveRecordTs = null;
+let _moveRecordTs = null;
 
-function openMoveModal(filenames) {
-  _moveFilenames = filenames;
+function openMoveModal(ts, filename) { _moveFilenames = [filename]; _moveRecordTs = ts;
   document.getElementById('moveDestDir').value = '';
   document.getElementById('moveError').textContent = '';
   document.getElementById('moveModal').classList.add('open');
@@ -1175,6 +1191,7 @@ function openMoveModal(filenames) {
 function closeMoveModal() {
   document.getElementById('moveModal').classList.remove('open');
   _moveFilenames = null;
+  _moveRecordTs = null;
 }
 
 async function submitBatchMove() {
@@ -1190,7 +1207,7 @@ async function submitBatchMove() {
     const res = await fetch('/api/batch/move-history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filenames: _moveFilenames, dest_dir: destDir }),
+      body: JSON.stringify({ ids: [_moveRecordTs], dest_dir: destDir }),
     });
     const data = await res.json();
     if (data.ok) {
