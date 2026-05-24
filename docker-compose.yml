@@ -7,8 +7,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./data/tasks_state.json:/app/tasks_state.json
-      - /mnt/nfs/pt/ytb_video:/app/video
-      - /mnt/nfs/pt/ytb_music:/app/music
+      - /mnt/nfs/pt/:/app/
       - ./logs:/app/logs
       - ./cookies:/app/cookies
       - ./config.yaml:/app/config.yaml
