@@ -8,6 +8,7 @@ services:
     volumes:
       - ./data/tasks_state.json:/app/tasks_state.json
       - /mnt/nfs/pt/ytb_video:/app/video
+      - /mnt/nfs/pt/ytb_sn_music:/app/snmusic
       - /mnt/nfs/pt/ytb_music:/app/music
       - ./logs:/app/logs
       - ./cookies:/app/cookies
